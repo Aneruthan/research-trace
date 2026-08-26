@@ -41,3 +41,16 @@ The AI should try to identify:
 - `deadline` — deadline mentioned in the meeting, if available
 - `source` — meeting from which the task was extracted
 - `confidence` — AI confidence in the extraction
+
+### Decision
+
+A decision represents a research-related choice or conclusion made during a meeting.
+
+The AI should try to identify:
+
+- `title` — short description of the decision
+- `description` — details explaining what was decided
+- `madeBy` — person or people associated with the decision, if explicitly identifiable
+- `reason` — stated reasoning or evidence behind the decision, if available
+- `source` — meeting from which the decision was extracted
+- `confidence` — AI confidence in the extraction
