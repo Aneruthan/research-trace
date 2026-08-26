@@ -79,3 +79,43 @@ Each meeting belongs to one project.
 
 Meeting information will later serve as input to the AI-assisted extraction module.
 
+## Entity Fields
+
+### User
+
+- `id` — unique identifier
+- `name` — user's name
+- `email` — user's email address
+- `role` — PROFESSOR or STUDENT
+
+### Project
+
+- `id` — unique identifier
+- `name` — project name
+- `description` — short description of the research project
+- `status` — current project status
+- `createdAt` — date/time when the project was created
+
+### ProjectMember
+
+- `id` — unique identifier
+- `projectId` — project associated with the member
+- `userId` — student associated with the project
+- `role` — student's role in the project
+
+### Milestone
+
+- `id` — unique identifier
+- `projectId` — project associated with the milestone
+- `title` — milestone name
+- `description` — description of the milestone
+- `status` — NOT_STARTED, IN_PROGRESS, COMPLETED, BLOCKED, or DEFERRED
+- `dueDate` — target completion date
+
+### Meeting
+
+- `id` — unique identifier
+- `projectId` — project associated with the meeting
+- `title` — meeting title
+- `meetingDate` — date/time of the meeting
+- `notes` — meeting notes or transcript
