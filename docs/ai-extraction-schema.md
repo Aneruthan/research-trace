@@ -26,3 +26,18 @@ The AI should identify the following categories of information:
 - Deadlines
 - Research entities
 - Possible changes in research direction
+
+## Extracted Information Structures
+
+### Task
+
+A task represents an action that needs to be performed as part of the research project.
+
+The AI should try to identify:
+
+- `title` — what needs to be done
+- `description` — additional details about the task
+- `assignee` — student responsible for the task, if explicitly identifiable
+- `deadline` — deadline mentioned in the meeting, if available
+- `source` — meeting from which the task was extracted
+- `confidence` — AI confidence in the extraction
