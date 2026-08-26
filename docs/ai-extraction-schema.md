@@ -94,3 +94,31 @@ The AI should try to identify:
 - `associatedTask` — task associated with the deadline, if identifiable
 - `source` — meeting from which the deadline was extracted
 - `confidence` — AI confidence in the extraction
+
+### Research Entity
+
+A research entity represents a named object or concept mentioned in a research meeting that may be relevant to the project's research context.
+
+The AI should try to identify:
+
+- `name` — name of the entity
+- `type` — type of entity, such as MODEL, DATASET, PAPER, METHOD, TOOL, or METRIC
+- `description` — additional information about the entity, if stated
+- `context` — how the entity is being used or discussed in the meeting
+- `source` — meeting from which the entity was extracted
+- `confidence` — AI confidence in the extraction
+
+### Possible Research Change
+
+A possible research change represents an indication that the direction, method, experiment plan, or research priority may have changed during a meeting.
+
+The AI should try to identify:
+
+- `description` — what appears to have changed
+- `previousApproach` — previous approach, method, experiment, or plan, if mentioned
+- `newApproach` — new approach, method, experiment, or plan, if mentioned
+- `reason` — stated reason for the change, if available
+- `source` — meeting from which the change was extracted
+- `confidence` — AI confidence in identifying the change
+
+Possible changes should be presented to the user for review rather than being treated as confirmed research decisions automatically.
