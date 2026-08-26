@@ -81,3 +81,16 @@ The AI should try to identify:
 - `comparison` — comparison with a baseline, previous result, or another experiment, if stated
 - `source` — meeting from which the result was extracted
 - `confidence` — AI confidence in the extraction
+
+### Deadline
+
+A deadline represents a time constraint mentioned during a research meeting.
+
+The AI should try to identify:
+
+- `description` — what the deadline applies to
+- `date` — specific date, if mentioned
+- `relativeDate` — relative expression such as "by Friday" or "next week", if used
+- `associatedTask` — task associated with the deadline, if identifiable
+- `source` — meeting from which the deadline was extracted
+- `confidence` — AI confidence in the extraction
