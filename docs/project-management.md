@@ -39,3 +39,43 @@ Represents a major stage or goal within a research project.
 ### Meeting
 
 Represents a research supervision meeting associated with a project.
+
+## Entity Relationships
+
+### User and Project
+
+A user can participate in multiple research projects, and a project can have multiple users.
+
+The relationship is represented through the ProjectMember entity.
+
+### ProjectMember
+
+ProjectMember connects a student with a project.
+
+This allows ResearchTrace to distinguish between:
+
+- The overall progress of a project
+- The individual contribution of each student
+
+### Project and Milestone
+
+A project can contain multiple milestones.
+
+Each milestone belongs to exactly one project.
+
+Example:
+
+Project
+→ Dataset Preparation
+→ Baseline Evaluation
+→ Model Evaluation
+→ Final Analysis
+
+### Project and Meeting
+
+A project can have multiple research supervision meetings.
+
+Each meeting belongs to one project.
+
+Meeting information will later serve as input to the AI-assisted extraction module.
+
