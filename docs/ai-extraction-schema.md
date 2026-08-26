@@ -54,3 +54,17 @@ The AI should try to identify:
 - `reason` — stated reasoning or evidence behind the decision, if available
 - `source` — meeting from which the decision was extracted
 - `confidence` — AI confidence in the extraction
+
+### Experiment
+
+An experiment represents a research investigation or evaluation that is planned, discussed, or conducted during a meeting.
+
+The AI should try to identify:
+
+- `title` — short description of the experiment
+- `description` — details of what will be tested or evaluated
+- `objective` — what the experiment is intended to investigate, if stated
+- `variables` — models, datasets, configurations, or other factors involved, if identifiable
+- `expectedOutcome` — expected result or comparison, if stated
+- `source` — meeting from which the experiment was extracted
+- `confidence` — AI confidence in the extraction
