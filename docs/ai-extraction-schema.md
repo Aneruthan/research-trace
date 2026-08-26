@@ -122,3 +122,17 @@ The AI should try to identify:
 - `confidence` — AI confidence in identifying the change
 
 Possible changes should be presented to the user for review rather than being treated as confirmed research decisions automatically.
+
+## User Review
+
+AI-extracted information is considered a suggestion until reviewed by an authorized user.
+
+The user should be able to:
+
+- Accept an extracted item
+- Edit an extracted item
+- Reject an extracted item
+
+The system should retain the original meeting as the source of the extracted information.
+
+Research changes and decisions should not be added to the confirmed research trace solely based on AI extraction without user review.
