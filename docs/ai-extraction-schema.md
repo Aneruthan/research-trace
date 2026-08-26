@@ -68,3 +68,16 @@ The AI should try to identify:
 - `expectedOutcome` — expected result or comparison, if stated
 - `source` — meeting from which the experiment was extracted
 - `confidence` — AI confidence in the extraction
+
+### Result
+
+A result represents an outcome or observation from an experiment that is discussed in the meeting.
+
+The AI should try to identify:
+
+- `description` — what was observed or measured
+- `experiment` — experiment associated with the result, if identifiable
+- `metrics` — measurements, scores, or quantitative values mentioned
+- `comparison` — comparison with a baseline, previous result, or another experiment, if stated
+- `source` — meeting from which the result was extracted
+- `confidence` — AI confidence in the extraction
