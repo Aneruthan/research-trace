@@ -24,6 +24,10 @@ public class MilestoneService {
         return milestoneRepository.findById(id);
     }
 
+    public List<Milestone> getMilestonesByProject(Long projectId) {
+        return milestoneRepository.findByProjectId(projectId);
+    }
+
     public Milestone saveMilestone(Milestone milestone) {
         return milestoneRepository.save(milestone);
     }

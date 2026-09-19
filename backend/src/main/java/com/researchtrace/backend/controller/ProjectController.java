@@ -1,9 +1,11 @@
 package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.model.Project;
+import com.researchtrace.backend.service.ProgressService;
 import com.researchtrace.backend.service.ProjectService;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -12,8 +14,14 @@ public class ProjectController {
 
     private final ProjectService projectService;
 
-    public ProjectController(ProjectService projectService) {
+    private final ProgressService progressService;
+
+    public ProjectController(
+            ProjectService projectService,
+            ProgressService progressService) {
+
         this.projectService = projectService;
+        this.progressService = progressService;
     }
 
     @GetMapping
@@ -25,6 +33,11 @@ public class ProjectController {
     public Project getProjectById(@PathVariable Long id) {
         return projectService.getProjectById(id)
             .orElseThrow(() -> new RuntimeException("Project not found"));
+    }
+
+    @GetMapping("/{projectId}/progress")
+    public BigDecimal getProjectProgress(@PathVariable Long projectId) {
+        return progressService.getProjectProgress(projectId);
     }
 
     @PostMapping

@@ -1,10 +1,12 @@
 package com.researchtrace.backend.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -26,6 +28,9 @@ public class Milestone {
     private MilestoneStatus status;
 
     private LocalDate dueDate;
+
+    @Column(precision = 6, scale = 2)
+    private BigDecimal weight;
 
     public Long getId() {
         return id;
@@ -73,5 +78,13 @@ public class Milestone {
 
     public void setDueDate(LocalDate dueDate) {
         this.dueDate = dueDate;
+    }
+
+    public BigDecimal getWeight() {
+        return weight;
+    }
+
+    public void setWeight(BigDecimal weight) {
+        this.weight = weight;
     }
 }
