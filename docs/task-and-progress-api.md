@@ -9,9 +9,10 @@ The module owns:
 - Task creation and management
 - Primary student assignment
 - Task status transitions
-- Student progress calculation
-- Milestone progress calculation
+- Derived milestone progress
 - Weighted project progress calculation
+
+Student progress is owned by this module but is not implemented yet.
 
 Research decisions, experiments, results, and research-event traceability are owned by the Research Traceability module.
 
@@ -27,9 +28,8 @@ A task represents one unit of work in a project. For the MVP, every task has exa
 | `assignedToUserId` | UUID/Long | yes | Primary student responsible for the task |
 | `title` | string | yes | Short task title |
 | `description` | string | no | Detailed work description |
-| `status` | enum | yes | `TODO`, `IN_PROGRESS`, or `DONE` |
+| `status` | enum | yes | `TODO`, `IN_PROGRESS`, or `COMPLETED` |
 | `dueDate` | date | no | Expected completion date |
-| `completedAt` | datetime | no | Set when the task becomes `DONE` |
 | `createdAt` | datetime | generated | Creation timestamp |
 | `updatedAt` | datetime | generated | Last modification timestamp |
 
@@ -72,7 +72,7 @@ Optional filters:
 
 `PUT /api/tasks/{taskId}`
 
-The update operation may change the title, description, milestone, assignee, due date, or status. A transition to `DONE` sets `completedAt`; moving away from `DONE` clears it.
+The update operation may change the title, description, milestone, assignee, due date, or status. `TaskStatus.COMPLETED` is the completed state.
 
 ### Delete a task
 
@@ -82,56 +82,56 @@ Deletion should be rejected or carefully handled if the task is referenced by an
 
 ## Progress rules
 
-### Student progress
+The current progress API is:
 
-Student progress is calculated only from tasks assigned to that student within the selected project:
+`GET /api/projects/{projectId}/progress`
 
-```text
-student progress = completed assigned tasks / total assigned tasks × 100
-```
+`TaskStatus.COMPLETED` is the completed state. `TODO` and `IN_PROGRESS` do not count as completed.
 
-If the student has no assigned tasks, the API should return `0` rather than divide by zero.
+Milestone progress is derived from tasks at calculation time. It is not stored on `Milestone`.
+
+Student progress is not implemented yet. Project progress is not an average of student percentages.
 
 ### Milestone progress
 
-For the MVP, milestone progress is calculated from the tasks linked to that milestone:
+Milestone progress is calculated from the tasks linked to that milestone:
 
 ```text
-milestone progress = completed milestone tasks / total milestone tasks × 100
+milestone progress = completed tasks / total tasks × 100
 ```
 
-If a milestone has no tasks, its progress is `0` until work is assigned.
+Only tasks with status `COMPLETED` count as completed. `TODO` and `IN_PROGRESS` do not.
+
+If a milestone has no tasks, its progress is `0`. Values are calculated with `BigDecimal` and rounded to 2 decimal places using `HALF_UP`.
 
 ### Project progress
 
-Project progress is calculated from milestone weights, not from the average of student percentages:
+Project progress is a weighted average of that derived milestone progress. Only milestones with a positive weight contribute. Null, zero, and negative weights are ignored.
 
 ```text
 project progress =
-  sum(milestone weight × milestone progress) / sum(milestone weights)
+  sum(milestone weight × milestone progress) / sum(positive milestone weights)
 ```
 
-The implementation should normalize milestone progress to a value between `0` and `1` before applying weights, or use percentage values consistently throughout the calculation.
-
-If a project has no weighted milestones, its progress should be `0`.
+Milestone progress and project progress both use percentage values from `0` to `100`. If a project has no valid weighted milestones, project progress is `0.00`.
 
 ## Example
 
-A project contains two milestones:
+A project contains two positively weighted milestones:
 
-| Milestone | Weight | Progress |
-|---|---:|---:|
-| Baseline evaluation | 40 | 100% |
-| Error analysis | 60 | 50% |
+| Milestone | Weight | Tasks | Derived progress |
+|---|---:|---|---:|
+| Baseline evaluation | 40 | 1 of 1 `COMPLETED` | 100.00 |
+| Error analysis | 60 | 1 of 2 `COMPLETED` | 50.00 |
 
 Therefore:
 
 ```text
-project progress = (40 × 1.00 + 60 × 0.50) / (40 + 60)
-                 = 70%
+project progress = (40 × 100 + 60 × 50) / (40 + 60)
+                 = 70.00
 ```
 
-Two students may contribute separate tasks to the same milestone. Their individual task completion affects the shared milestone, which then affects the weighted project progress.
+Two students may contribute separate tasks to the same milestone. Those tasks are combined when deriving that milestone's progress, which then affects weighted project progress.
 
 ## Validation rules
 
@@ -139,18 +139,17 @@ Two students may contribute separate tasks to the same milestone. Their individu
 - A task must belong to an existing project.
 - The primary assignee must be a student who belongs to the project.
 - A selected milestone must belong to the same project as the task.
-- A milestone weight must be positive.
-- Progress values must remain within `0` to `100` percent.
+- A milestone weight must be positive to contribute to project progress. Null, zero, and negative weights are ignored.
+- Progress values remain within `0` to `100` percent.
 - The project progress calculation must not use the average of student progress values.
-- Status changes must update `completedAt` consistently.
 
 ## Initial test cases
 
 1. Create a task with a valid project, milestone, and student.
 2. Reject a task whose assignee belongs to another project.
-3. Change a task from `TODO` to `DONE` and verify `completedAt` is populated.
-4. Calculate student progress when the student has completed 2 of 4 tasks.
-5. Calculate milestone progress when tasks are assigned to two different students.
+3. Change a task from `TODO` to `COMPLETED`.
+4. Student progress is not implemented yet.
+5. Derive milestone progress when tasks are assigned to two different students.
 6. Calculate weighted project progress from two milestones.
-7. Return `0` progress for a student, milestone, or project with no applicable work.
+7. Return `0.00` project progress when there are no valid weighted milestones, and `0` milestone progress when a milestone has no tasks.
 8. Reject a task linked to a milestone from another project.
