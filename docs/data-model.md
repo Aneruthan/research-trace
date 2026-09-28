@@ -92,7 +92,7 @@ All entities can use standard audit fields such as `id`, `createdAt`, and `updat
 
 ### Student progress and project progress
 
-Student progress is not implemented yet. It remains a distinct concern: work completed by one student, not an input to project progress.
+Student progress is calculated from the tasks assigned to one student: `completed assigned tasks / total assigned tasks × 100`. Only `COMPLETED` tasks count, and a student with no assigned tasks has progress `0.00`. It remains a distinct concern: work completed by one student, not an input to project progress.
 
 Project progress is not an aggregation of student percentages. Tasks contribute to a shared milestone through their status. Milestone progress is derived, not stored:
 

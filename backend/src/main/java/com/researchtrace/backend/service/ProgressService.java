@@ -36,7 +36,7 @@ public class ProgressService {
                 continue;
             }
 
-            BigDecimal progress = milestoneProgress(milestone.getId());
+            BigDecimal progress = getMilestoneProgress(milestone.getId());
 
             weightedProgress = weightedProgress.add(weight.multiply(progress));
             totalWeight = totalWeight.add(weight);
@@ -49,7 +49,7 @@ public class ProgressService {
         return weightedProgress.divide(totalWeight, PROGRESS_SCALE, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal milestoneProgress(Long milestoneId) {
+    public BigDecimal getMilestoneProgress(Long milestoneId) {
         long totalTasks = taskRepository.countByMilestoneId(milestoneId);
         if (totalTasks == 0) {
             return zeroProgress();
@@ -59,6 +59,23 @@ public class ProgressService {
             milestoneId,
             TaskStatus.COMPLETED);
 
+        return percentage(completedTasks, totalTasks);
+    }
+
+    public BigDecimal getStudentProgress(Long studentId) {
+        long totalTasks = taskRepository.countByAssigneeId(studentId);
+        if (totalTasks == 0) {
+            return zeroProgress();
+        }
+
+        long completedTasks = taskRepository.countByAssigneeIdAndStatus(
+            studentId,
+            TaskStatus.COMPLETED);
+
+        return percentage(completedTasks, totalTasks);
+    }
+
+    private BigDecimal percentage(long completedTasks, long totalTasks) {
         return BigDecimal.valueOf(completedTasks)
             .multiply(ONE_HUNDRED)
             .divide(BigDecimal.valueOf(totalTasks), PROGRESS_SCALE, RoundingMode.HALF_UP);
