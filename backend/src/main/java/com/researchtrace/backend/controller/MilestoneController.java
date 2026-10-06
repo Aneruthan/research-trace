@@ -3,7 +3,7 @@ package com.researchtrace.backend.controller;
 import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.service.MilestoneService;
 import org.springframework.web.bind.annotation.*;
-
+import com.researchtrace.backend.dto.MilestoneUpdateFromExtractionRequest;
 import java.util.List;
 
 @RestController
@@ -41,6 +41,17 @@ public class MilestoneController {
         return milestoneService.saveMilestone(milestone);
     }
 
+    @PostMapping("/update-from-extraction")
+    public Milestone updateMilestoneFromExtraction(
+        @RequestBody MilestoneUpdateFromExtractionRequest request) {
+
+    return milestoneService.updateMilestoneFromExtraction(
+            request.getMilestoneId(),
+            request.getTitle(),
+            request.getDescription(),
+            request.getDueDate());
+    }
+    
     @DeleteMapping("/{id}")
     public void deleteMilestone(@PathVariable Long id) {
         milestoneService.deleteMilestone(id);
