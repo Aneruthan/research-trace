@@ -81,6 +81,14 @@ export type TaskSuggestion = {
   acceptedTaskId: number | null
 }
 
+export type SuggestionUpdate = {
+  title: string | null
+  description: string | null
+  assigneeId: number | null
+  milestoneId: number | null
+  dueDate: string | null
+}
+
 export type ProjectDashboard = {
   project: Project | null
   projectProgress: number | null
