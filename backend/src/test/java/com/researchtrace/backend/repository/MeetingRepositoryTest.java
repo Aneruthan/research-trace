@@ -39,4 +39,26 @@ class MeetingRepositoryTest {
         assertThat(reloaded.getNotes()).isEqualTo(notes);
         assertThat(reloaded.getNotes()).hasSize(notes.length());
     }
+
+    @Test
+    void findsMeetingsOfOneProjectOnly() {
+        meetingRepository.save(meeting(1L, "Weekly sync"));
+        meetingRepository.save(meeting(1L, "Design review"));
+        meetingRepository.save(meeting(2L, "Other project"));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(meetingRepository.findByProjectId(1L))
+            .extracting(Meeting::getTitle)
+            .containsExactlyInAnyOrder("Weekly sync", "Design review");
+    }
+
+    private Meeting meeting(Long projectId, String title) {
+        Meeting meeting = new Meeting();
+        meeting.setProjectId(projectId);
+        meeting.setTitle(title);
+        meeting.setMeetingDate(LocalDate.of(2026, 10, 2));
+        meeting.setNotes("Notes");
+        return meeting;
+    }
 }

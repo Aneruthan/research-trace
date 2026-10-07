@@ -20,6 +20,10 @@ public class MeetingService {
         return meetingRepository.findAll();
     }
 
+    public List<Meeting> getMeetingsByProject(Long projectId) {
+        return meetingRepository.findByProjectId(projectId);
+    }
+
     public Optional<Meeting> getMeetingById(Long id) {
         return meetingRepository.findById(id);
     }

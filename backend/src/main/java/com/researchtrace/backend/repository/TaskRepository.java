@@ -10,6 +10,8 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     List<Task> findByMilestoneId(Long milestoneId);
 
+    List<Task> findByMilestoneIdIn(List<Long> milestoneIds);
+
     List<Task> findByAssigneeId(Long assigneeId);
 
     long countByMilestoneId(Long milestoneId);
