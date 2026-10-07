@@ -1,7 +1,5 @@
 package com.researchtrace.backend.ai;
 
-import org.springframework.stereotype.Component;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -19,8 +17,8 @@ import java.util.function.Function;
  * </pre>
  *
  * Only the title is required. A line with a single segment is treated as the title.
+ * Registered as the TaskExtractor bean when task-extractor.mode=stub.
  */
-@Component
 public class StubTaskExtractor implements TaskExtractor {
 
     private static final List<String> PREFIXES = List.of("ACTION:", "TODO:");
