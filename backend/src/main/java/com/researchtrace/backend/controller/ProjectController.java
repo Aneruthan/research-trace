@@ -1,10 +1,14 @@
 package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.dto.ProjectDashboard;
+import com.researchtrace.backend.model.Experiment;
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.model.Project;
 import com.researchtrace.backend.model.ProjectMember;
+import com.researchtrace.backend.model.ResearchDecision;
+import com.researchtrace.backend.model.ResearchEvent;
+import com.researchtrace.backend.model.Result;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.service.MeetingService;
 import com.researchtrace.backend.service.MilestoneService;
@@ -12,6 +16,7 @@ import com.researchtrace.backend.service.ProgressService;
 import com.researchtrace.backend.service.ProjectDashboardService;
 import com.researchtrace.backend.service.ProjectMemberService;
 import com.researchtrace.backend.service.ProjectService;
+import com.researchtrace.backend.service.ResearchQueryService;
 import com.researchtrace.backend.service.TaskService;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +41,8 @@ public class ProjectController {
 
     private final ProjectDashboardService projectDashboardService;
 
+    private final ResearchQueryService researchQueryService;
+
     public ProjectController(
             ProjectService projectService,
             ProgressService progressService,
@@ -43,7 +50,8 @@ public class ProjectController {
             ProjectMemberService projectMemberService,
             MeetingService meetingService,
             TaskService taskService,
-            ProjectDashboardService projectDashboardService) {
+            ProjectDashboardService projectDashboardService,
+            ResearchQueryService researchQueryService) {
 
         this.projectService = projectService;
         this.progressService = progressService;
@@ -52,6 +60,7 @@ public class ProjectController {
         this.meetingService = meetingService;
         this.taskService = taskService;
         this.projectDashboardService = projectDashboardService;
+        this.researchQueryService = researchQueryService;
     }
 
     @GetMapping
@@ -93,6 +102,26 @@ public class ProjectController {
     @GetMapping("/{projectId}/dashboard")
     public ProjectDashboard getDashboard(@PathVariable Long projectId) {
         return projectDashboardService.getDashboard(projectId);
+    }
+
+    @GetMapping("/{projectId}/research-decisions")
+    public List<ResearchDecision> getResearchDecisions(@PathVariable Long projectId) {
+        return researchQueryService.getResearchDecisions(projectId);
+    }
+
+    @GetMapping("/{projectId}/experiments")
+    public List<Experiment> getExperiments(@PathVariable Long projectId) {
+        return researchQueryService.getExperiments(projectId);
+    }
+
+    @GetMapping("/{projectId}/results")
+    public List<Result> getResults(@PathVariable Long projectId) {
+        return researchQueryService.getResults(projectId);
+    }
+
+    @GetMapping("/{projectId}/research-events")
+    public List<ResearchEvent> getResearchEvents(@PathVariable Long projectId) {
+        return researchQueryService.getResearchEvents(projectId);
     }
 
     @PostMapping

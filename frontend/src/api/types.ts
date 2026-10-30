@@ -1,3 +1,12 @@
+export type UserRole = 'PROFESSOR' | 'STUDENT'
+
+export type User = {
+  id: number | null
+  name: string | null
+  email: string | null
+  role: UserRole | null
+}
+
 export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
 
 export type ProjectMemberRole = 'PROFESSOR' | 'STUDENT'

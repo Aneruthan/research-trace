@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getProjectDashboard } from '../api/dashboard'
-import type { ProjectDashboard } from '../api/types'
+import type { ProjectDashboard, User } from '../api/types'
+import { getUsers } from '../api/users'
 import { PageHeader } from '../components/common/PageHeader'
 import { DashboardView } from '../components/dashboard/DashboardView'
 
@@ -8,6 +9,7 @@ const SELECTED_PROJECT_ID = 1
 
 export function Dashboard() {
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null)
+  const [users, setUsers] = useState<User[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -16,10 +18,14 @@ export function Dashboard() {
     setLoading(true)
     setError(null)
 
-    getProjectDashboard(SELECTED_PROJECT_ID, controller.signal)
-      .then((data) => {
+    Promise.all([
+      getProjectDashboard(SELECTED_PROJECT_ID, controller.signal),
+      getUsers(controller.signal).catch(() => [] as User[]),
+    ])
+      .then(([data, loadedUsers]) => {
         if (!controller.signal.aborted) {
           setDashboard(data)
+          setUsers(loadedUsers)
         }
       })
       .catch((cause: unknown) => {
@@ -49,7 +55,7 @@ export function Dashboard() {
           {error}
         </p>
       ) : null}
-      {!loading && !error && dashboard ? <DashboardView dashboard={dashboard} /> : null}
+      {!loading && !error && dashboard ? <DashboardView dashboard={dashboard} users={users} /> : null}
     </section>
   )
 }

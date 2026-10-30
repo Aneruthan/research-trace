@@ -24,6 +24,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,6 +39,9 @@ class ExtractionReviewServiceTest {
     @Mock
     private MeetingService meetingService;
 
+    @Mock
+    private AcceptedReviewRecorder acceptedReviewRecorder;
+
     private ExtractionReviewService extractionReviewService;
 
     @BeforeEach
@@ -45,9 +49,14 @@ class ExtractionReviewServiceTest {
         extractionReviewService = new ExtractionReviewService(
             extractionReviewRepository,
             meetingService,
-            JsonMapper.builder().build());
-        lenient().when(extractionReviewRepository.save(any(ExtractionReview.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
+            JsonMapper.builder().build(),
+            acceptedReviewRecorder);
+        lenient().when(extractionReviewRepository.saveAndFlush(any(ExtractionReview.class)))
+            .thenAnswer(invocation -> {
+                ExtractionReview review = invocation.getArgument(0);
+                review.setId(5L);
+                return review;
+            });
     }
 
     @Test
@@ -58,11 +67,34 @@ class ExtractionReviewServiceTest {
         ExtractionReview saved = extractionReviewService.reviewExtraction(21L, request);
 
         ArgumentCaptor<ExtractionReview> captor = ArgumentCaptor.forClass(ExtractionReview.class);
-        verify(extractionReviewRepository).save(captor.capture());
+        verify(extractionReviewRepository).saveAndFlush(captor.capture());
         assertThat(saved.getMeetingId()).isEqualTo(21L);
         assertThat(saved.getStatus()).isEqualTo(ExtractionReviewStatus.EDITED);
         assertThat(saved.getExtractionJson()).contains("Keep the baseline");
         assertThat(saved.getCreatedAt()).isNotNull();
+        verify(acceptedReviewRecorder, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void acceptedReviewRecordsUsingTheMeetingProject() {
+        Meeting meeting = meeting();
+        meeting.setProjectId(1L);
+        when(meetingService.getMeetingById(21L)).thenReturn(Optional.of(meeting));
+
+        ExtractionReview saved = extractionReviewService.reviewExtraction(21L, request(ExtractionReviewStatus.ACCEPTED));
+
+        verify(acceptedReviewRecorder).record(eq(saved), eq(1L), any());
+    }
+
+    @Test
+    void acceptedReviewRequiresTheMeetingProject() {
+        when(meetingService.getMeetingById(21L)).thenReturn(Optional.of(meeting()));
+
+        assertThatThrownBy(() -> extractionReviewService.reviewExtraction(21L, request(ExtractionReviewStatus.ACCEPTED)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not linked to a project");
+        verify(extractionReviewRepository, never()).saveAndFlush(any());
+        verify(acceptedReviewRecorder, never()).record(any(), any(), any());
     }
 
     @Test
@@ -79,7 +111,7 @@ class ExtractionReviewServiceTest {
         assertThatThrownBy(() -> extractionReviewService.reviewExtraction(21L, missingExtraction))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("required");
-        verify(extractionReviewRepository, never()).save(any());
+        verify(extractionReviewRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -92,7 +124,7 @@ class ExtractionReviewServiceTest {
         assertThatThrownBy(() -> extractionReviewService.getReviewsForMeeting(99L))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Meeting not found");
-        verify(extractionReviewRepository, never()).save(any());
+        verify(extractionReviewRepository, never()).saveAndFlush(any());
     }
 
     @Test

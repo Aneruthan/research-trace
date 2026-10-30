@@ -2,6 +2,8 @@ package com.researchtrace.backend.research;
 
 import com.researchtrace.backend.dto.research.ExtractionReviewRequest;
 import com.researchtrace.backend.model.ExtractionReview;
+import com.researchtrace.backend.model.ExtractionReviewStatus;
+import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.repository.ExtractionReviewRepository;
 import com.researchtrace.backend.service.MeetingService;
 import org.springframework.http.HttpStatus;
@@ -20,21 +22,27 @@ public class ExtractionReviewService {
     private final ExtractionReviewRepository extractionReviewRepository;
     private final MeetingService meetingService;
     private final JsonMapper jsonMapper;
+    private final AcceptedReviewRecorder acceptedReviewRecorder;
 
     public ExtractionReviewService(
             ExtractionReviewRepository extractionReviewRepository,
             MeetingService meetingService,
-            JsonMapper jsonMapper) {
+            JsonMapper jsonMapper,
+            AcceptedReviewRecorder acceptedReviewRecorder) {
         this.extractionReviewRepository = extractionReviewRepository;
         this.meetingService = meetingService;
         this.jsonMapper = jsonMapper;
+        this.acceptedReviewRecorder = acceptedReviewRecorder;
     }
 
     @Transactional
     public ExtractionReview reviewExtraction(Long meetingId, ExtractionReviewRequest reviewRequest) {
-        requireMeeting(meetingId);
+        Meeting meeting = requireMeeting(meetingId);
         if (reviewRequest == null || reviewRequest.getStatus() == null || reviewRequest.getExtraction() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Review status and extraction are required");
+        }
+        if (reviewRequest.getStatus() == ExtractionReviewStatus.ACCEPTED && meeting.getProjectId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting is not linked to a project");
         }
 
         ExtractionReview review = new ExtractionReview();
@@ -42,7 +50,11 @@ public class ExtractionReviewService {
         review.setStatus(reviewRequest.getStatus());
         review.setExtractionJson(writeExtraction(reviewRequest));
         review.setCreatedAt(LocalDateTime.now());
-        return extractionReviewRepository.save(review);
+        ExtractionReview saved = extractionReviewRepository.saveAndFlush(review);
+        if (saved.getStatus() == ExtractionReviewStatus.ACCEPTED) {
+            acceptedReviewRecorder.record(saved, meeting.getProjectId(), reviewRequest.getExtraction());
+        }
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -51,8 +63,8 @@ public class ExtractionReviewService {
         return extractionReviewRepository.findByMeetingIdOrderByCreatedAtAsc(meetingId);
     }
 
-    private void requireMeeting(Long meetingId) {
-        meetingService.getMeetingById(meetingId)
+    private Meeting requireMeeting(Long meetingId) {
+        return meetingService.getMeetingById(meetingId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
     }
 
