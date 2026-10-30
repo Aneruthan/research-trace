@@ -84,6 +84,70 @@ export type ExtractionReview = {
   createdAt: string | null
 }
 
+export type ResearchDecisionStatus = 'ACTIVE' | 'SUPERSEDED'
+
+export type ExperimentStatus = 'PLANNED' | 'RUNNING' | 'COMPLETED'
+
+export type ResearchEventType =
+  | 'MEETING'
+  | 'DECISION'
+  | 'EXPERIMENT'
+  | 'RESULT'
+  | 'OBSERVATION'
+  | 'HYPOTHESIS'
+  | 'RESEARCH_QUESTION'
+
+export type ResearchDecision = {
+  id: number | null
+  projectId: number | null
+  meetingId: number | null
+  extractionReviewId: number | null
+  title: string | null
+  decisionText: string | null
+  rationale: string | null
+  status: ResearchDecisionStatus | null
+  supersedesDecisionId: number | null
+  decidedAt: string | null
+  sourceReference: string | null
+}
+
+export type Experiment = {
+  id: number | null
+  projectId: number | null
+  researchDecisionId: number | null
+  title: string | null
+  hypothesis: string | null
+  method: string | null
+  status: ExperimentStatus | null
+  startedAt: string | null
+  completedAt: string | null
+  sourceReference: string | null
+}
+
+export type Result = {
+  id: number | null
+  projectId: number | null
+  experimentId: number | null
+  summary: string | null
+  dataOrMetric: string | null
+  observedAt: string | null
+  sourceReference: string | null
+}
+
+export type ResearchEvent = {
+  id: number | null
+  projectId: number | null
+  eventType: ResearchEventType | null
+  occurredAt: string | null
+  title: string | null
+  description: string | null
+  meetingId: number | null
+  researchDecisionId: number | null
+  experimentId: number | null
+  resultId: number | null
+  sourceReference: string | null
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -117,6 +181,42 @@ export async function submitResearchReview(
     throw new ApiError(await failureMessage(response, 'Could not save the research review'), response.status)
   }
   return response.json() as Promise<ExtractionReview>
+}
+
+export async function getProjectResearchDecisions(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<ResearchDecision[]> {
+  return getJson(`/api/projects/${projectId}/research-decisions`, signal, `Could not load research decisions for project ${projectId}`)
+}
+
+export async function getProjectExperiments(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<Experiment[]> {
+  return getJson(`/api/projects/${projectId}/experiments`, signal, `Could not load experiments for project ${projectId}`)
+}
+
+export async function getProjectResults(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<Result[]> {
+  return getJson(`/api/projects/${projectId}/results`, signal, `Could not load results for project ${projectId}`)
+}
+
+export async function getProjectResearchEvents(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<ResearchEvent[]> {
+  return getJson(`/api/projects/${projectId}/research-events`, signal, `Could not load research events for project ${projectId}`)
+}
+
+async function getJson<T>(path: string, signal: AbortSignal | undefined, fallback: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { signal })
+  if (!response.ok) {
+    throw new Error(`${fallback} (${response.status})`)
+  }
+  return response.json() as Promise<T>
 }
 
 export async function getResearchReviews(

@@ -113,7 +113,7 @@ export function SuggestionCard({
             <p className="mt-2 text-sm leading-6 text-stone-700">{suggestion.description}</p>
           ) : null}
           <dl className="mt-3 grid gap-2 text-xs text-stone-600 sm:grid-cols-2">
-            <div>Assignee id: {suggestion.assigneeId ?? '—'}</div>
+            <div>Assignee: {suggestion.assigneeName ?? '—'}{suggestion.assigneeId != null ? ` (${suggestion.assigneeId})` : ''}</div>
             <div>Milestone id: {suggestion.milestoneId ?? '—'}</div>
             <div>Due date: {suggestion.dueDate ?? '—'}</div>
             <div>Confidence: {suggestion.confidence ?? '—'}</div>

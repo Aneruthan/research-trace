@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { assigneeLabel } from '../../api/users'
 import type {
   Meeting,
   Milestone,
@@ -6,13 +7,15 @@ import type {
   StudentProgressItem,
   Task,
   TaskSuggestion,
+  User,
 } from '../../api/types'
 
 type DashboardViewProps = {
   dashboard: ProjectDashboard
+  users: User[]
 }
 
-export function DashboardView({ dashboard }: DashboardViewProps) {
+export function DashboardView({ dashboard, users }: DashboardViewProps) {
   const project = dashboard.project
   const progressByMilestone = new Map(
     dashboard.milestoneProgress.map((item) => [item.milestoneId, item.progress]),
@@ -47,7 +50,7 @@ export function DashboardView({ dashboard }: DashboardViewProps) {
           ) : (
             <ul className="space-y-4">
               {dashboard.studentProgress.map((item) => (
-                <StudentProgressRow key={item.studentId ?? 'unknown'} item={item} />
+                <StudentProgressRow key={item.studentId ?? 'unknown'} item={item} users={users} />
               ))}
             </ul>
           )}
@@ -87,7 +90,7 @@ export function DashboardView({ dashboard }: DashboardViewProps) {
           ) : (
             <ul className="divide-y divide-stone-100">
               {dashboard.tasks.map((task) => (
-                <TaskRow key={task.id ?? task.title} task={task} />
+                <TaskRow key={task.id ?? task.title} task={task} users={users} />
               ))}
             </ul>
           )}
@@ -100,7 +103,7 @@ export function DashboardView({ dashboard }: DashboardViewProps) {
         ) : (
           <ul className="divide-y divide-stone-100">
             {dashboard.pendingTaskSuggestions.map((suggestion) => (
-              <SuggestionRow key={suggestion.id ?? suggestion.title} suggestion={suggestion} />
+              <SuggestionRow key={suggestion.id ?? suggestion.title} suggestion={suggestion} users={users} />
             ))}
           </ul>
         )}
@@ -124,10 +127,10 @@ function ProgressMeter({ label, value }: { label: string; value: number | null }
   )
 }
 
-function StudentProgressRow({ item }: { item: StudentProgressItem }) {
+function StudentProgressRow({ item, users }: { item: StudentProgressItem; users: User[] }) {
   return (
     <li>
-      <p className="text-sm font-medium text-stone-900">Student {item.studentId ?? 'unknown'}</p>
+      <p className="text-sm font-medium text-stone-900">{assigneeLabel(item.studentId, users)}</p>
       <ProgressMeter label="Progress" value={item.progress} />
     </li>
   )
@@ -162,13 +165,13 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
   )
 }
 
-function TaskRow({ task }: { task: Task }) {
+function TaskRow({ task, users }: { task: Task; users: User[] }) {
   return (
     <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-baseline sm:justify-between">
       <div>
         <p className="text-sm font-medium text-stone-900">{task.title ?? 'Untitled task'}</p>
         <p className="text-xs text-stone-500">
-          Assignee {task.assigneeId ?? 'none'} · Milestone {task.milestoneId ?? 'none'}
+          Assignee {assigneeLabel(task.assigneeId, users)} · Milestone {task.milestoneId ?? 'none'}
           {task.dueDate ? ` · Due ${task.dueDate}` : ''}
         </p>
       </div>
@@ -177,13 +180,13 @@ function TaskRow({ task }: { task: Task }) {
   )
 }
 
-function SuggestionRow({ suggestion }: { suggestion: TaskSuggestion }) {
+function SuggestionRow({ suggestion, users }: { suggestion: TaskSuggestion; users: User[] }) {
   return (
     <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-baseline sm:justify-between">
       <div>
         <p className="text-sm font-medium text-stone-900">{suggestion.title ?? 'Untitled suggestion'}</p>
         <p className="text-xs text-stone-500">
-          {suggestion.assigneeName ?? (suggestion.assigneeId != null ? `Student ${suggestion.assigneeId}` : 'Unassigned')}
+          {assigneeLabel(suggestion.assigneeId, users, suggestion.assigneeName)}
         </p>
       </div>
       <span className="text-xs font-medium tracking-wide text-stone-500">{suggestion.status ?? 'PENDING'}</span>

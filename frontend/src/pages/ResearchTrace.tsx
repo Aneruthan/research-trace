@@ -3,15 +3,24 @@ import { getProjectMeetings } from '../api/meetings'
 import {
   ApiError,
   extractResearch,
+  getProjectExperiments,
+  getProjectResearchDecisions,
+  getProjectResearchEvents,
+  getProjectResults,
   getResearchReviews,
   submitResearchReview,
+  type Experiment,
   type ExtractionReview,
   type MeetingExtraction,
+  type ResearchDecision,
+  type ResearchEvent,
   type ResearchReviewStatus,
+  type Result,
 } from '../api/research'
 import type { Meeting } from '../api/types'
 import { PageHeader } from '../components/common/PageHeader'
 import { ExtractionSections } from '../components/research/ExtractionSections'
+import { PersistedResearch } from '../components/research/PersistedResearch'
 
 const SELECTED_PROJECT_ID = 1
 
@@ -32,6 +41,14 @@ export function ResearchTrace() {
   const [reviews, setReviews] = useState<ExtractionReview[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+
+  const [decisions, setDecisions] = useState<ResearchDecision[]>([])
+  const [experiments, setExperiments] = useState<Experiment[]>([])
+  const [results, setResults] = useState<Result[]>([])
+  const [events, setEvents] = useState<ResearchEvent[]>([])
+  const [recordsLoading, setRecordsLoading] = useState(true)
+  const [recordsError, setRecordsError] = useState<string | null>(null)
+  const [recordsReload, setRecordsReload] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -81,6 +98,37 @@ export function ResearchTrace() {
     return () => controller.abort()
   }, [meetingId])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    setRecordsLoading(true)
+    setRecordsError(null)
+    Promise.all([
+      getProjectResearchDecisions(SELECTED_PROJECT_ID, controller.signal),
+      getProjectExperiments(SELECTED_PROJECT_ID, controller.signal),
+      getProjectResults(SELECTED_PROJECT_ID, controller.signal),
+      getProjectResearchEvents(SELECTED_PROJECT_ID, controller.signal),
+    ])
+      .then(([loadedDecisions, loadedExperiments, loadedResults, loadedEvents]) => {
+        if (!controller.signal.aborted) {
+          setDecisions(loadedDecisions)
+          setExperiments(loadedExperiments)
+          setResults(loadedResults)
+          setEvents(loadedEvents)
+        }
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setRecordsError(cause instanceof Error ? cause.message : 'Could not load persisted research records')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setRecordsLoading(false)
+        }
+      })
+    return () => controller.abort()
+  }, [recordsReload])
+
   async function handleExtract() {
     if (meetingId == null) {
       return
@@ -113,7 +161,10 @@ export function ResearchTrace() {
     try {
       await submitResearchReview(meetingId, status, extraction)
       setReviews(await getResearchReviews(meetingId))
-      setActionMessage(`Research review saved as ${status}. This does not create tasks.`)
+      setRecordsReload((value) => value + 1)
+      setActionMessage(status === 'ACCEPTED'
+        ? 'Research review saved as ACCEPTED. Persisted records were refreshed. A record appears only when that extraction has enough information to store.'
+        : `Research review saved as ${status}. Review history was updated. This status does not create persisted research records.`)
     } catch (cause: unknown) {
       setActionError(cause instanceof Error ? cause.message : 'Could not save the research review')
     } finally {
@@ -125,10 +176,10 @@ export function ResearchTrace() {
     <section>
       <PageHeader
         title="Research Trace"
-        description="Extract research information from a stored meeting and save a review. This does not create or accept tasks."
+        description="Extract research information from a stored meeting, save a review, and read the research records stored for this project."
       />
       <p className="mt-4 text-sm text-stone-600">
-        Task suggestions are reviewed on the meeting page. A research review only stores the extraction JSON and a status.
+        Task suggestions stay on the meeting page. Saving a review as ACCEPTED asks the backend to store supported decisions, experiments, results, and timeline events. Other statuses update review history only.
       </p>
 
       {meetingsLoading ? <p className="mt-6 text-sm text-stone-600">Loading meetings…</p> : null}
@@ -178,27 +229,38 @@ export function ResearchTrace() {
       ) : null}
       {actionError ? <Alert message={actionError} /> : null}
 
-      {extraction ? (
-        <div className="mt-6 space-y-4">
-          <ExtractionSections extraction={extraction} />
-          <div className="flex flex-wrap gap-2">
-            {REVIEW_STATUSES.map((status) => (
-              <button
-                key={status}
-                type="button"
-                className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 disabled:opacity-60"
-                disabled={submitting != null}
-                onClick={() => void handleReview(status)}
-              >
-                {submitting === status ? 'Saving…' : `Save as ${status}`}
-              </button>
-            ))}
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold text-stone-950">Extracted research information</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          This is the current extractor response. It is not a persisted research record until you save it as ACCEPTED.
+        </p>
+        {extraction ? (
+          <div className="mt-4 space-y-4">
+            <ExtractionSections extraction={extraction} />
+            <div className="flex flex-wrap gap-2">
+              {REVIEW_STATUSES.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 disabled:opacity-60"
+                  disabled={submitting != null}
+                  onClick={() => void handleReview(status)}
+                >
+                  {submitting === status ? 'Saving…' : `Save as ${status}`}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : (
+          <p className="mt-3 text-sm text-stone-500">Select a meeting and extract to see the response here.</p>
+        )}
+      </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold text-stone-950">Saved reviews</h2>
+        <h2 className="text-sm font-semibold text-stone-950">Review history</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          Each saved review keeps its status, timestamp, and extraction JSON. That status is not the same as a stored decision, experiment, result, or event.
+        </p>
         {meetingId == null ? <p className="mt-3 text-sm text-stone-500">Select a meeting to see its reviews.</p> : null}
         {reviewsLoading ? <p className="mt-3 text-sm text-stone-600">Loading reviews…</p> : null}
         {reviewsError ? <Alert message={reviewsError} /> : null}
@@ -213,12 +275,23 @@ export function ResearchTrace() {
                   <p className="text-sm font-medium text-stone-950">{review.status ?? 'No status'}</p>
                   <p className="text-xs text-stone-500">{review.createdAt ?? 'No timestamp'}</p>
                 </div>
+                <p className="mt-3 text-xs font-medium text-stone-500">Stored extraction</p>
                 <StoredExtraction json={review.extractionJson} />
               </li>
             ))}
           </ul>
         ) : null}
       </section>
+
+      <PersistedResearch
+        projectId={SELECTED_PROJECT_ID}
+        loading={recordsLoading}
+        error={recordsError}
+        decisions={decisions}
+        experiments={experiments}
+        results={results}
+        events={events}
+      />
     </section>
   )
 }
