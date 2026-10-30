@@ -13,12 +13,14 @@ import com.researchtrace.backend.model.ResearchDecision;
 import com.researchtrace.backend.model.ResearchDecisionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.Result;
+import com.researchtrace.backend.research.ChangeDetectionService;
 import com.researchtrace.backend.research.ResearchTraceService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -32,9 +34,13 @@ import java.util.List;
 public class ResearchTraceController {
 
     private final ResearchTraceService researchTraceService;
+    private final ChangeDetectionService changeDetectionService;
 
-    public ResearchTraceController(ResearchTraceService researchTraceService) {
+    public ResearchTraceController(
+            ResearchTraceService researchTraceService,
+            ChangeDetectionService changeDetectionService) {
         this.researchTraceService = researchTraceService;
+        this.changeDetectionService = changeDetectionService;
     }
 
     // --- Decisions ---
@@ -133,6 +139,14 @@ public class ResearchTraceController {
             @PathVariable Long projectId,
             @RequestParam(required = false) ResearchChangeStatus status) {
         return researchTraceService.getChanges(projectId, status);
+    }
+
+    @PutMapping("/changes/{changeId}/status")
+    public ResearchChange updateChangeStatus(
+            @PathVariable Long projectId,
+            @PathVariable Long changeId,
+            @RequestParam ResearchChangeStatus status) {
+        return changeDetectionService.updateChangeStatus(projectId, changeId, status);
     }
 
     // --- Summary ---

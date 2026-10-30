@@ -15,8 +15,14 @@ public class ResearchExtractionConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "none", matchIfMissing = true)
+    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "unconfigured")
     public ResearchNotesExtractor unconfiguredResearchNotesExtractor() {
         return new UnconfiguredResearchNotesExtractor();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "stub", matchIfMissing = true)
+    public ResearchNotesExtractor stubResearchNotesExtractor() {
+        return new StubResearchNotesExtractor();
     }
 }

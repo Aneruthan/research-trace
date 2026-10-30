@@ -12,6 +12,7 @@ import com.researchtrace.backend.model.ResearchDecisionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.model.Result;
+import com.researchtrace.backend.research.ChangeDetectionService;
 import com.researchtrace.backend.research.ResearchTraceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,16 +23,15 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,6 +45,9 @@ class ResearchTraceControllerTest {
 
     @MockitoBean
     private ResearchTraceService researchTraceService;
+
+    @MockitoBean
+    private ChangeDetectionService changeDetectionService;
 
     @Test
     void listsDecisionsForProject() throws Exception {
@@ -197,6 +200,21 @@ class ResearchTraceControllerTest {
                     """))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").value(60));
+    }
+
+    @Test
+    void updatesChangeStatus() throws Exception {
+        ResearchChange change = new ResearchChange();
+        change.setId(99L);
+        change.setStatus(ResearchChangeStatus.REVIEWED);
+
+        when(changeDetectionService.updateChangeStatus(PROJECT_ID, 99L, ResearchChangeStatus.REVIEWED))
+            .thenReturn(change);
+
+        mockMvc.perform(put("/api/projects/1/research/changes/99/status?status=REVIEWED"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(99))
+            .andExpect(jsonPath("$.status").value("REVIEWED"));
     }
 
     @Test
