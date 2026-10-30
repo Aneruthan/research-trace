@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getProjectMeetings } from '../api/meetings'
 import {
-  ApiError,
-  createResearchDecision,
   extractResearch,
   getDecisionLineage,
-  getResearchChanges,
-  getResearchDecisions,
   getResearchReviews,
   getResearchSummary,
-  getResearchTimeline,
   submitResearchReview,
   supersedeResearchDecision,
   updateResearchChangeStatus,
@@ -244,25 +239,25 @@ export function ResearchTrace() {
         <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
           <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Decisions</p>
           <p className="mt-1 text-2xl font-bold text-stone-900">
-            {summary?.activeDecisions ?? 0}
-            <span className="text-xs font-normal text-stone-500"> / {summary?.totalDecisions ?? 0} active</span>
+            {summaryLoading ? '—' : (summary?.activeDecisions ?? 0)}
+            <span className="text-xs font-normal text-stone-500"> / {summaryLoading ? '—' : (summary?.totalDecisions ?? 0)} active</span>
           </p>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
           <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Experiments</p>
           <p className="mt-1 text-2xl font-bold text-stone-900">
-            {summary?.completedExperiments ?? 0}
-            <span className="text-xs font-normal text-stone-500"> / {summary?.totalExperiments ?? 0} done</span>
+            {summaryLoading ? '—' : (summary?.completedExperiments ?? 0)}
+            <span className="text-xs font-normal text-stone-500"> / {summaryLoading ? '—' : (summary?.totalExperiments ?? 0)} done</span>
           </p>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
           <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Results & Metrics</p>
-          <p className="mt-1 text-2xl font-bold text-stone-900">{summary?.totalResults ?? 0}</p>
+          <p className="mt-1 text-2xl font-bold text-stone-900">{summaryLoading ? '—' : (summary?.totalResults ?? 0)}</p>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
           <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Flagged Shifts</p>
           <p className={`mt-1 text-2xl font-bold ${summary && summary.flaggedChanges > 0 ? 'text-amber-600' : 'text-stone-900'}`}>
-            {summary?.flaggedChanges ?? 0}
+            {summaryLoading ? '—' : (summary?.flaggedChanges ?? 0)}
             <span className="text-xs font-normal text-stone-500"> to review</span>
           </p>
         </div>
