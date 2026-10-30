@@ -20,6 +20,10 @@ public class ProjectMemberService {
         return projectMemberRepository.findAll();
     }
 
+    public List<ProjectMember> getMembersByProject(Long projectId) {
+        return projectMemberRepository.findByProjectId(projectId);
+    }
+
     public Optional<ProjectMember> getProjectMemberById(Long id) {
         return projectMemberRepository.findById(id);
     }

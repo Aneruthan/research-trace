@@ -5,8 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface ExtractionReviewRepository
-        extends JpaRepository<ExtractionReview, Long> {
+public interface ExtractionReviewRepository extends JpaRepository<ExtractionReview, Long> {
 
-    List<ExtractionReview> findByMeetingId(Long meetingId);
+    List<ExtractionReview> findByMeetingIdOrderByCreatedAtAsc(Long meetingId);
 }

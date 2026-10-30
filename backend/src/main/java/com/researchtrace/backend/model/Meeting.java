@@ -21,6 +21,7 @@ public class Meeting {
     @Column(nullable = false)
     private LocalDate meetingDate;
 
+    @Column(columnDefinition = "TEXT")
     private String notes;
 
     public Long getId() {

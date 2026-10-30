@@ -2,8 +2,12 @@ package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.service.MilestoneService;
+import com.researchtrace.backend.service.ProgressService;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import com.researchtrace.backend.dto.MilestoneUpdateFromExtractionRequest;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -12,8 +16,11 @@ public class MilestoneController {
 
     private final MilestoneService milestoneService;
 
-    public MilestoneController(MilestoneService milestoneService) {
+    private final ProgressService progressService;
+
+    public MilestoneController(MilestoneService milestoneService, ProgressService progressService) {
         this.milestoneService = milestoneService;
+        this.progressService = progressService;
     }
 
     @GetMapping
@@ -32,6 +39,13 @@ public class MilestoneController {
             .orElseThrow(() -> new RuntimeException("Milestone not found"));
     }
 
+    @GetMapping("/{milestoneId}/progress")
+    public BigDecimal getMilestoneProgress(@PathVariable Long milestoneId) {
+        milestoneService.getMilestoneById(milestoneId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+        return progressService.getMilestoneProgress(milestoneId);
+    }
+
     @PutMapping("/{id}")
     public Milestone updateMilestone(
         @PathVariable Long id,
@@ -41,17 +55,6 @@ public class MilestoneController {
         return milestoneService.saveMilestone(milestone);
     }
 
-    @PostMapping("/update-from-extraction")
-    public Milestone updateMilestoneFromExtraction(
-        @RequestBody MilestoneUpdateFromExtractionRequest request) {
-
-    return milestoneService.updateMilestoneFromExtraction(
-            request.getMilestoneId(),
-            request.getTitle(),
-            request.getDescription(),
-            request.getDueDate());
-    }
-    
     @DeleteMapping("/{id}")
     public void deleteMilestone(@PathVariable Long id) {
         milestoneService.deleteMilestone(id);

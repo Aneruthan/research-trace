@@ -1,6 +1,14 @@
 package com.researchtrace.backend.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+
+import java.time.LocalDateTime;
 
 @Entity
 public class ExtractionReview {
@@ -16,8 +24,11 @@ public class ExtractionReview {
     @Column(nullable = false)
     private ExtractionReviewStatus status;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String extractionJson;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
     public Long getId() {
         return id;
@@ -49,5 +60,13 @@ public class ExtractionReview {
 
     public void setExtractionJson(String extractionJson) {
         this.extractionJson = extractionJson;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }
