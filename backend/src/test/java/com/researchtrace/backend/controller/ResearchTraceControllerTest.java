@@ -12,6 +12,8 @@ import com.researchtrace.backend.model.ResearchDecisionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.model.Result;
+import com.researchtrace.backend.model.Task;
+import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.research.ChangeDetectionService;
 import com.researchtrace.backend.research.ResearchTraceService;
 import org.junit.jupiter.api.Test;
@@ -251,5 +253,52 @@ class ResearchTraceControllerTest {
 
         mockMvc.perform(get("/api/projects/999/research/decisions"))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getTasksForDecisionReturnsTasks() throws Exception {
+        Task task = new Task();
+        task.setId(77L);
+        task.setTitle("Implement benchmark");
+        task.setStatus(TaskStatus.TODO);
+        task.setProjectId(PROJECT_ID);
+        task.setResearchDecisionId(10L);
+
+        when(researchTraceService.getTasksForDecision(PROJECT_ID, 10L)).thenReturn(List.of(task));
+
+        mockMvc.perform(get("/api/projects/1/research/decisions/10/tasks"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].id").value(77))
+            .andExpect(jsonPath("$[0].title").value("Implement benchmark"))
+            .andExpect(jsonPath("$[0].status").value("TODO"))
+            .andExpect(jsonPath("$[0].researchDecisionId").value(10));
+    }
+
+    @Test
+    void getTasksForDecisionReturnsEmptyListWhenNoTasksLinked() throws Exception {
+        when(researchTraceService.getTasksForDecision(PROJECT_ID, 10L)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/projects/1/research/decisions/10/tasks"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void getTasksForDecisionReturns404WhenDecisionNotFound() throws Exception {
+        when(researchTraceService.getTasksForDecision(PROJECT_ID, 999L))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Decision not found: 999"));
+
+        mockMvc.perform(get("/api/projects/1/research/decisions/999/tasks"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getTasksForDecisionReturns400WhenDecisionBelongsToOtherProject() throws Exception {
+        when(researchTraceService.getTasksForDecision(PROJECT_ID, 20L))
+            .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision does not belong to project " + PROJECT_ID));
+
+        mockMvc.perform(get("/api/projects/1/research/decisions/20/tasks"))
+            .andExpect(status().isBadRequest());
     }
 }

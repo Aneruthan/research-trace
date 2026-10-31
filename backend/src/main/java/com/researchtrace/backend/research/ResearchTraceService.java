@@ -24,6 +24,9 @@ import com.researchtrace.backend.repository.ResearchChangeRepository;
 import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import com.researchtrace.backend.repository.ResearchEventRepository;
 import com.researchtrace.backend.repository.ResultRepository;
+import com.researchtrace.backend.model.Task;
+import com.researchtrace.backend.repository.TaskRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +48,27 @@ public class ResearchTraceService {
     private final ResultRepository resultRepository;
     private final ResearchEventRepository researchEventRepository;
     private final ResearchChangeRepository researchChangeRepository;
+    private final TaskRepository taskRepository;
+
+    @Autowired
+    public ResearchTraceService(
+            ProjectRepository projectRepository,
+            MeetingRepository meetingRepository,
+            ResearchDecisionRepository researchDecisionRepository,
+            ExperimentRepository experimentRepository,
+            ResultRepository resultRepository,
+            ResearchEventRepository researchEventRepository,
+            ResearchChangeRepository researchChangeRepository,
+            TaskRepository taskRepository) {
+        this.projectRepository = projectRepository;
+        this.meetingRepository = meetingRepository;
+        this.researchDecisionRepository = researchDecisionRepository;
+        this.experimentRepository = experimentRepository;
+        this.resultRepository = resultRepository;
+        this.researchEventRepository = researchEventRepository;
+        this.researchChangeRepository = researchChangeRepository;
+        this.taskRepository = taskRepository;
+    }
 
     public ResearchTraceService(
             ProjectRepository projectRepository,
@@ -54,14 +78,11 @@ public class ResearchTraceService {
             ResultRepository resultRepository,
             ResearchEventRepository researchEventRepository,
             ResearchChangeRepository researchChangeRepository) {
-        this.projectRepository = projectRepository;
-        this.meetingRepository = meetingRepository;
-        this.researchDecisionRepository = researchDecisionRepository;
-        this.experimentRepository = experimentRepository;
-        this.resultRepository = resultRepository;
-        this.researchEventRepository = researchEventRepository;
-        this.researchChangeRepository = researchChangeRepository;
+        this(projectRepository, meetingRepository, researchDecisionRepository, experimentRepository,
+             resultRepository, researchEventRepository, researchChangeRepository, null);
     }
+
+
 
     public void requireProject(Long projectId) {
         if (projectId == null || !projectRepository.existsById(projectId)) {
@@ -104,6 +125,15 @@ public class ResearchTraceService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision does not belong to project " + projectId);
         }
         return decision;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Task> getTasksForDecision(Long projectId, Long decisionId) {
+        ResearchDecision decision = getDecision(projectId, decisionId);
+        if (taskRepository == null) {
+            return List.of();
+        }
+        return taskRepository.findByProjectIdAndResearchDecisionId(projectId, decision.getId());
     }
 
     @Transactional

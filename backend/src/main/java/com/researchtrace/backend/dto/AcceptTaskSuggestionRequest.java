@@ -10,5 +10,16 @@ public record AcceptTaskSuggestionRequest(
         String description,
         Long assigneeId,
         Long milestoneId,
-        LocalDate dueDate) {
+        LocalDate dueDate,
+        Long researchDecisionId,
+        Long experimentId) {
+
+    public AcceptTaskSuggestionRequest(
+            String title,
+            String description,
+            Long assigneeId,
+            Long milestoneId,
+            LocalDate dueDate) {
+        this(title, description, assigneeId, milestoneId, dueDate, null, null);
+    }
 }

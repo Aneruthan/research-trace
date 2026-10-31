@@ -1,13 +1,17 @@
 package com.researchtrace.backend.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 public class Task {
@@ -16,7 +20,17 @@ public class Task {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private Long projectId;
+
     private Long milestoneId;
+
+    private Long meetingId;
+
+    private Long taskSuggestionId;
+
+    private Long researchDecisionId;
+
+    private Long experimentId;
 
     private Long assigneeId;
 
@@ -29,6 +43,27 @@ public class Task {
 
     private LocalDate dueDate;
 
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
+
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    public void onPrePersist() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        if (updatedAt == null) {
+            updatedAt = createdAt;
+        }
+    }
+
+    @PreUpdate
+    public void onPreUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }
@@ -37,12 +72,52 @@ public class Task {
         this.id = id;
     }
 
+    public Long getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(Long projectId) {
+        this.projectId = projectId;
+    }
+
     public Long getMilestoneId() {
         return milestoneId;
     }
 
     public void setMilestoneId(Long milestoneId) {
         this.milestoneId = milestoneId;
+    }
+
+    public Long getMeetingId() {
+        return meetingId;
+    }
+
+    public void setMeetingId(Long meetingId) {
+        this.meetingId = meetingId;
+    }
+
+    public Long getTaskSuggestionId() {
+        return taskSuggestionId;
+    }
+
+    public void setTaskSuggestionId(Long taskSuggestionId) {
+        this.taskSuggestionId = taskSuggestionId;
+    }
+
+    public Long getResearchDecisionId() {
+        return researchDecisionId;
+    }
+
+    public void setResearchDecisionId(Long researchDecisionId) {
+        this.researchDecisionId = researchDecisionId;
+    }
+
+    public Long getExperimentId() {
+        return experimentId;
+    }
+
+    public void setExperimentId(Long experimentId) {
+        this.experimentId = experimentId;
     }
 
     public Long getAssigneeId() {
@@ -83,5 +158,21 @@ public class Task {
 
     public void setDueDate(LocalDate dueDate) {
         this.dueDate = dueDate;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

@@ -21,4 +21,10 @@ public interface ResearchEventRepository extends JpaRepository<ResearchEvent, Lo
     List<ResearchEvent> findByResearchDecisionId(Long researchDecisionId);
 
     List<ResearchEvent> findByExperimentId(Long experimentId);
+
+    List<ResearchEvent> findByTaskId(Long taskId);
+
+    boolean existsByTaskIdAndEventType(Long taskId, ResearchEventType eventType);
+
+    long countByProjectId(Long projectId);
 }

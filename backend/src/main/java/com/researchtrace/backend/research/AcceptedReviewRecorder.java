@@ -79,7 +79,9 @@ public class AcceptedReviewRecorder {
             }
             ResearchDecision decision = new ResearchDecision();
             decision.setProjectId(projectId);
-            decision.setMeetingId(review.getMeetingId());
+            if (review.getMeetingId() != null) {
+                decision.setMeetingId(review.getMeetingId());
+            }
             decision.setExtractionReviewId(review.getId());
             decision.setTitle(title);
             decision.setDecisionText(blankToNull(extracted.getDescription()));
@@ -106,6 +108,9 @@ public class AcceptedReviewRecorder {
             }
             Experiment experiment = new Experiment();
             experiment.setProjectId(projectId);
+            if (review.getMeetingId() != null) {
+                experiment.setMeetingId(review.getMeetingId());
+            }
             experiment.setTitle(title);
             experiment.setHypothesis(blankToNull(extracted.getObjective()));
             experiment.setStatus(ExperimentStatus.PLANNED);
@@ -136,6 +141,9 @@ public class AcceptedReviewRecorder {
             }
             Result result = new Result();
             result.setProjectId(projectId);
+            if (review.getMeetingId() != null) {
+                result.setMeetingId(review.getMeetingId());
+            }
             result.setExperimentId(experimentId);
             result.setSummary(summary);
             result.setDataOrMetric(blankToNull(extracted.getMetrics()));

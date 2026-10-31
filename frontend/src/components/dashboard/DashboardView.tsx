@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { assigneeLabel } from '../../api/users'
 import type {
   Meeting,
@@ -19,6 +20,11 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
   const project = dashboard.project
   const progressByMilestone = new Map(
     dashboard.milestoneProgress.map((item) => [item.milestoneId, item.progress]),
+  )
+  const milestoneTitleMap = new Map<number, string>(
+    dashboard.milestones
+      .filter((m) => m.id != null && m.title != null)
+      .map((m) => [m.id as number, m.title as string]),
   )
   const meetings = [...dashboard.meetings].sort((left, right) =>
     (right.meetingDate ?? '').localeCompare(left.meetingDate ?? ''),
@@ -42,6 +48,35 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
         </div>
         <ProgressMeter label="Project progress" value={dashboard.projectProgress} />
       </section>
+
+      {dashboard.researchMetrics ? (
+        <section className="rounded-lg border border-stone-200 bg-white p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-stone-950">Research Traceability</h2>
+              <p className="mt-1 text-xs text-stone-500">Decisions, experiments, evidence, and detected direction changes.</p>
+            </div>
+            <Link
+              to="/research-trace"
+              className="text-xs font-medium text-stone-900 underline hover:text-stone-700"
+            >
+              View Research Trace &rarr;
+            </Link>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <MetricCard
+              label="Decisions"
+              value={dashboard.researchMetrics.totalDecisions}
+              subtext={`${dashboard.researchMetrics.activeDecisions} active`}
+            />
+            <MetricCard label="Active Decisions" value={dashboard.researchMetrics.activeDecisions} />
+            <MetricCard label="Experiments" value={dashboard.researchMetrics.totalExperiments} />
+            <MetricCard label="Results" value={dashboard.researchMetrics.totalResults} />
+            <MetricCard label="Timeline Events" value={dashboard.researchMetrics.totalEvents} />
+            <MetricCard label="Changes" value={dashboard.researchMetrics.totalChanges} />
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Student progress">
@@ -90,7 +125,12 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
           ) : (
             <ul className="divide-y divide-stone-100">
               {dashboard.tasks.map((task) => (
-                <TaskRow key={task.id ?? task.title} task={task} users={users} />
+                <TaskRow
+                  key={task.id ?? task.title}
+                  task={task}
+                  users={users}
+                  milestoneTitleMap={milestoneTitleMap}
+                />
               ))}
             </ul>
           )}
@@ -108,6 +148,16 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
           </ul>
         )}
       </Panel>
+    </div>
+  )
+}
+
+function MetricCard({ label, value, subtext }: { label: string; value: number; subtext?: string }) {
+  return (
+    <div className="rounded border border-stone-100 bg-stone-50 p-3">
+      <p className="text-xs font-medium text-stone-500">{label}</p>
+      <p className="mt-1 text-xl font-bold tracking-tight text-stone-900">{value}</p>
+      {subtext ? <p className="mt-0.5 text-[11px] text-stone-500">{subtext}</p> : null}
     </div>
   )
 }
@@ -146,7 +196,12 @@ function MilestoneRow({
   return (
     <li>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-stone-900">{milestone.title ?? 'Untitled milestone'}</p>
+        <div>
+          <p className="text-sm font-medium text-stone-900">{milestone.title ?? 'Untitled milestone'}</p>
+          {milestone.weight != null ? (
+            <p className="text-[11px] text-stone-500">Weight: {milestone.weight}</p>
+          ) : null}
+        </div>
         <span className="text-xs font-medium tracking-wide text-stone-500">
           {milestone.status ?? 'No status'}
         </span>
@@ -165,15 +220,41 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
   )
 }
 
-function TaskRow({ task, users }: { task: Task; users: User[] }) {
+function TaskRow({
+  task,
+  users,
+  milestoneTitleMap,
+}: {
+  task: Task
+  users: User[]
+  milestoneTitleMap: Map<number, string>
+}) {
+  const milestoneName = task.milestoneId != null
+    ? milestoneTitleMap.get(task.milestoneId) ?? `Milestone #${task.milestoneId}`
+    : 'No milestone'
+
   return (
     <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-baseline sm:justify-between">
       <div>
         <p className="text-sm font-medium text-stone-900">{task.title ?? 'Untitled task'}</p>
         <p className="text-xs text-stone-500">
-          Assignee {assigneeLabel(task.assigneeId, users)} · Milestone {task.milestoneId ?? 'none'}
+          Assignee: {assigneeLabel(task.assigneeId, users)} · Milestone: {milestoneName}
           {task.dueDate ? ` · Due ${task.dueDate}` : ''}
         </p>
+        {(task.researchDecisionId || task.experimentId) ? (
+          <div className="mt-1 flex flex-wrap gap-2">
+            {task.researchDecisionId ? (
+              <span className="inline-flex items-center rounded bg-stone-100 px-1.5 py-0.5 text-[11px] font-medium text-stone-700">
+                Decision #{task.researchDecisionId}
+              </span>
+            ) : null}
+            {task.experimentId ? (
+              <span className="inline-flex items-center rounded bg-stone-100 px-1.5 py-0.5 text-[11px] font-medium text-stone-700">
+                Experiment #{task.experimentId}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <span className="text-xs font-medium tracking-wide text-stone-500">{task.status ?? 'No status'}</span>
     </li>
@@ -188,6 +269,11 @@ function SuggestionRow({ suggestion, users }: { suggestion: TaskSuggestion; user
         <p className="text-xs text-stone-500">
           {assigneeLabel(suggestion.assigneeId, users, suggestion.assigneeName)}
         </p>
+        {suggestion.sourceExcerpt ? (
+          <p className="mt-1 text-xs italic text-stone-600 line-clamp-2">
+            "{suggestion.sourceExcerpt}"
+          </p>
+        ) : null}
       </div>
       <span className="text-xs font-medium tracking-wide text-stone-500">{suggestion.status ?? 'PENDING'}</span>
     </li>

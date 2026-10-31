@@ -38,6 +38,8 @@ public class ResearchEvent {
 
     private Long meetingId;
 
+    private Long taskId;
+
     private Long researchDecisionId;
 
     private Long experimentId;
@@ -153,6 +155,14 @@ public class ResearchEvent {
 
     public void setSourceReference(String sourceReference) {
         this.sourceReference = sourceReference;
+    }
+
+    public Long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(Long taskId) {
+        this.taskId = taskId;
     }
 
     public Long getCreatedByUserId() {

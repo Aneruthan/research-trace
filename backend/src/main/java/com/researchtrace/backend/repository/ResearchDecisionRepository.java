@@ -22,4 +22,8 @@ public interface ResearchDecisionRepository extends JpaRepository<ResearchDecisi
     Optional<ResearchDecision> findBySupersedesDecisionId(Long supersedesDecisionId);
 
     List<ResearchDecision> findAllBySupersedesDecisionId(Long supersedesDecisionId);
+
+    long countByProjectId(Long projectId);
+
+    long countByProjectIdAndStatus(Long projectId, ResearchDecisionStatus status);
 }

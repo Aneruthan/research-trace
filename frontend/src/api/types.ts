@@ -66,12 +66,19 @@ export type Meeting = {
 
 export type Task = {
   id: number | null
+  projectId?: number | null
   milestoneId: number | null
   assigneeId: number | null
+  meetingId?: number | null
+  taskSuggestionId?: number | null
+  researchDecisionId?: number | null
+  experimentId?: number | null
   title: string | null
   description: string | null
   status: TaskStatus | null
   dueDate: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
 }
 
 export type TaskSuggestion = {
@@ -88,6 +95,8 @@ export type TaskSuggestion = {
   confidence: number | null
   status: TaskSuggestionStatus | null
   acceptedTaskId: number | null
+  researchDecisionId?: number | null
+  experimentId?: number | null
 }
 
 export type SuggestionUpdate = {
@@ -96,6 +105,17 @@ export type SuggestionUpdate = {
   assigneeId: number | null
   milestoneId: number | null
   dueDate: string | null
+  researchDecisionId?: number | null
+  experimentId?: number | null
+}
+
+export type ResearchMetrics = {
+  totalDecisions: number
+  activeDecisions: number
+  totalExperiments: number
+  totalResults: number
+  totalEvents: number
+  totalChanges: number
 }
 
 export type ProjectDashboard = {
@@ -108,4 +128,5 @@ export type ProjectDashboard = {
   meetings: Meeting[]
   tasks: Task[]
   pendingTaskSuggestions: TaskSuggestion[]
+  researchMetrics?: ResearchMetrics | null
 }

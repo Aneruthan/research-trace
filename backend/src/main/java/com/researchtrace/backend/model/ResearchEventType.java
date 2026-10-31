@@ -8,5 +8,6 @@ public enum ResearchEventType {
     OBSERVATION,
     HYPOTHESIS,
     RESEARCH_QUESTION,
-    CHANGE
+    CHANGE,
+    TASK_COMPLETED
 }

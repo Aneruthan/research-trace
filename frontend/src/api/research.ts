@@ -13,6 +13,7 @@ export type ResearchEventType =
   | 'HYPOTHESIS'
   | 'RESEARCH_QUESTION'
   | 'CHANGE'
+  | 'TASK_COMPLETED'
 export type ResearchChangeStatus = 'FLAGGED' | 'REVIEWED' | 'DISMISSED'
 
 // Extracted DTO types from AI
@@ -154,6 +155,7 @@ export type ResearchEvent = {
   occurredAt: string | null
   createdAt?: string | null
   meetingId: number | null
+  taskId?: number | null
   researchDecisionId: number | null
   experimentId: number | null
   resultId: number | null

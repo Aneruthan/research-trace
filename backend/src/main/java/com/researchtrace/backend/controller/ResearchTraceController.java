@@ -13,6 +13,7 @@ import com.researchtrace.backend.model.ResearchDecision;
 import com.researchtrace.backend.model.ResearchDecisionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.Result;
+import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.research.ChangeDetectionService;
 import com.researchtrace.backend.research.ResearchTraceService;
 import jakarta.validation.Valid;
@@ -81,6 +82,13 @@ public class ResearchTraceController {
             @PathVariable Long projectId,
             @PathVariable Long decisionId) {
         return researchTraceService.getDecisionLineage(projectId, decisionId);
+    }
+
+    @GetMapping("/decisions/{decisionId}/tasks")
+    public List<Task> getTasksForDecision(
+            @PathVariable Long projectId,
+            @PathVariable Long decisionId) {
+        return researchTraceService.getTasksForDecision(projectId, decisionId);
     }
 
     // --- Experiments ---

@@ -18,6 +18,7 @@ export default function App() {
           <Route path="tasks" element={<Tasks />} />
           <Route path="milestones" element={<Milestones />} />
           <Route path="research-trace" element={<ResearchTrace />} />
+          <Route path="research" element={<Navigate to="/research-trace" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

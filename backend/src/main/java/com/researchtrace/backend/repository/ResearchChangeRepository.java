@@ -13,4 +13,6 @@ public interface ResearchChangeRepository extends JpaRepository<ResearchChange, 
     List<ResearchChange> findByProjectIdAndStatusOrderByDetectedAtDesc(Long projectId, ResearchChangeStatus status);
 
     List<ResearchChange> findByMeetingId(Long meetingId);
+
+    long countByProjectId(Long projectId);
 }

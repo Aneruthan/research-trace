@@ -13,12 +13,15 @@ import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.model.TaskSuggestion;
 import com.researchtrace.backend.model.TaskSuggestionStatus;
+import com.researchtrace.backend.repository.ExperimentRepository;
 import com.researchtrace.backend.repository.MeetingRepository;
 import com.researchtrace.backend.repository.MilestoneRepository;
 import com.researchtrace.backend.repository.ProjectMemberRepository;
+import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import com.researchtrace.backend.repository.TaskRepository;
 import com.researchtrace.backend.repository.TaskSuggestionRepository;
 import com.researchtrace.backend.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -48,6 +52,31 @@ public class TaskSuggestionService {
     private final MilestoneRepository milestoneRepository;
     private final TaskRepository taskRepository;
     private final TaskExtractor taskExtractor;
+    private final ResearchDecisionRepository researchDecisionRepository;
+    private final ExperimentRepository experimentRepository;
+
+    @Autowired
+    public TaskSuggestionService(
+            MeetingRepository meetingRepository,
+            TaskSuggestionRepository taskSuggestionRepository,
+            ProjectMemberRepository projectMemberRepository,
+            UserRepository userRepository,
+            MilestoneRepository milestoneRepository,
+            TaskRepository taskRepository,
+            TaskExtractor taskExtractor,
+            ResearchDecisionRepository researchDecisionRepository,
+            ExperimentRepository experimentRepository) {
+
+        this.meetingRepository = meetingRepository;
+        this.taskSuggestionRepository = taskSuggestionRepository;
+        this.projectMemberRepository = projectMemberRepository;
+        this.userRepository = userRepository;
+        this.milestoneRepository = milestoneRepository;
+        this.taskRepository = taskRepository;
+        this.taskExtractor = taskExtractor;
+        this.researchDecisionRepository = researchDecisionRepository;
+        this.experimentRepository = experimentRepository;
+    }
 
     public TaskSuggestionService(
             MeetingRepository meetingRepository,
@@ -58,13 +87,8 @@ public class TaskSuggestionService {
             TaskRepository taskRepository,
             TaskExtractor taskExtractor) {
 
-        this.meetingRepository = meetingRepository;
-        this.taskSuggestionRepository = taskSuggestionRepository;
-        this.projectMemberRepository = projectMemberRepository;
-        this.userRepository = userRepository;
-        this.milestoneRepository = milestoneRepository;
-        this.taskRepository = taskRepository;
-        this.taskExtractor = taskExtractor;
+        this(meetingRepository, taskSuggestionRepository, projectMemberRepository, userRepository,
+             milestoneRepository, taskRepository, taskExtractor, null, null);
     }
 
     @Transactional
@@ -135,7 +159,15 @@ public class TaskSuggestionService {
         task.setAssigneeId(suggestion.getAssigneeId());
         task.setMilestoneId(suggestion.getMilestoneId());
         task.setDueDate(suggestion.getDueDate());
+        task.setProjectId(suggestion.getProjectId());
+        task.setMeetingId(suggestion.getMeetingId());
+        task.setTaskSuggestionId(suggestion.getId());
+        task.setResearchDecisionId(suggestion.getResearchDecisionId());
+        task.setExperimentId(suggestion.getExperimentId());
         task.setStatus(TaskStatus.TODO);
+        LocalDateTime now = LocalDateTime.now();
+        task.setCreatedAt(now);
+        task.setUpdatedAt(now);
         Task savedTask = taskRepository.save(task);
 
         suggestion.setStatus(TaskSuggestionStatus.ACCEPTED);
@@ -191,6 +223,8 @@ public class TaskSuggestionService {
         Long assigneeId = suggestion.getAssigneeId();
         Long milestoneId = suggestion.getMilestoneId();
         LocalDate dueDate = suggestion.getDueDate();
+        Long researchDecisionId = suggestion.getResearchDecisionId();
+        Long experimentId = suggestion.getExperimentId();
 
         if (request != null) {
             if (request.title() != null) {
@@ -208,12 +242,20 @@ public class TaskSuggestionService {
             if (request.dueDate() != null) {
                 dueDate = request.dueDate();
             }
+            if (request.researchDecisionId() != null) {
+                researchDecisionId = request.researchDecisionId();
+            }
+            if (request.experimentId() != null) {
+                experimentId = request.experimentId();
+            }
         }
 
         String validTitle = requireTitle(title);
         String validDescription = optionalText(description, "Description");
         Long validAssigneeId = requireProjectStudent(suggestion.getProjectId(), assigneeId);
         Long validMilestoneId = requireProjectMilestone(suggestion.getProjectId(), milestoneId);
+        Long validResearchDecisionId = requireProjectResearchDecision(suggestion.getProjectId(), researchDecisionId);
+        Long validExperimentId = requireProjectExperiment(suggestion.getProjectId(), experimentId);
         if (!isValidConfidence(suggestion.getConfidence())) {
             throw badRequest("Confidence must be between 0 and 1");
         }
@@ -223,6 +265,8 @@ public class TaskSuggestionService {
         suggestion.setAssigneeId(validAssigneeId);
         suggestion.setMilestoneId(validMilestoneId);
         suggestion.setDueDate(dueDate);
+        suggestion.setResearchDecisionId(validResearchDecisionId);
+        suggestion.setExperimentId(validExperimentId);
     }
 
     private String requireTitle(String value) {
@@ -268,6 +312,38 @@ public class TaskSuggestionService {
             throw badRequest("Milestone must belong to the meeting's project");
         }
         return milestoneId;
+    }
+
+    private Long requireProjectResearchDecision(Long projectId, Long decisionId) {
+        if (decisionId == null) {
+            return null;
+        }
+        if (researchDecisionRepository == null) {
+            return decisionId;
+        }
+        boolean belongsToProject = projectId != null && researchDecisionRepository.findById(decisionId)
+            .filter(decision -> Objects.equals(projectId, decision.getProjectId()))
+            .isPresent();
+        if (!belongsToProject) {
+            throw badRequest("Research decision must belong to the meeting's project");
+        }
+        return decisionId;
+    }
+
+    private Long requireProjectExperiment(Long projectId, Long experimentId) {
+        if (experimentId == null) {
+            return null;
+        }
+        if (experimentRepository == null) {
+            return experimentId;
+        }
+        boolean belongsToProject = projectId != null && experimentRepository.findById(experimentId)
+            .filter(exp -> Objects.equals(projectId, exp.getProjectId()))
+            .isPresent();
+        if (!belongsToProject) {
+            throw badRequest("Experiment must belong to the meeting's project");
+        }
+        return experimentId;
     }
 
     private List<StudentCandidate> loadStudents(Long projectId) {
