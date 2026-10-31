@@ -130,12 +130,20 @@ public class Experiment {
         this.startedAt = startedAt;
     }
 
+    public void setStartedAt(LocalDateTime startedAt) {
+        this.startedAt = startedAt == null ? null : startedAt.toLocalDate();
+    }
+
     public LocalDate getCompletedAt() {
         return completedAt;
     }
 
     public void setCompletedAt(LocalDate completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt == null ? null : completedAt.toLocalDate();
     }
 
     public LocalDateTime getCreatedAt() {

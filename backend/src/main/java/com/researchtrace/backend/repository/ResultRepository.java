@@ -7,6 +7,8 @@ import java.util.List;
 
 public interface ResultRepository extends JpaRepository<Result, Long> {
 
+    List<Result> findByProjectId(Long projectId);
+
     List<Result> findByProjectIdOrderByCreatedAtDesc(Long projectId);
 
     List<Result> findByExperimentId(Long experimentId);

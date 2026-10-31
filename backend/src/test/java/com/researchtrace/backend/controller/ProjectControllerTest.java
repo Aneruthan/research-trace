@@ -1,12 +1,18 @@
 package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.dto.ProjectDashboard;
+import com.researchtrace.backend.model.Experiment;
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.model.Project;
 import com.researchtrace.backend.model.ProjectMember;
 import com.researchtrace.backend.model.ProjectMemberRole;
 import com.researchtrace.backend.model.ProjectStatus;
+import com.researchtrace.backend.model.ResearchDecision;
+import com.researchtrace.backend.model.ResearchDecisionStatus;
+import com.researchtrace.backend.model.ResearchEvent;
+import com.researchtrace.backend.model.ResearchEventType;
+import com.researchtrace.backend.model.Result;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.service.MeetingService;
@@ -15,6 +21,7 @@ import com.researchtrace.backend.service.ProgressService;
 import com.researchtrace.backend.service.ProjectDashboardService;
 import com.researchtrace.backend.service.ProjectMemberService;
 import com.researchtrace.backend.service.ProjectService;
+import com.researchtrace.backend.service.ResearchQueryService;
 import com.researchtrace.backend.service.TaskService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +65,9 @@ class ProjectControllerTest {
 
     @MockitoBean
     private ProjectDashboardService projectDashboardService;
+
+    @MockitoBean
+    private ResearchQueryService researchQueryService;
 
     @Test
     void returnsProjectProgress() throws Exception {
@@ -171,5 +181,53 @@ class ProjectControllerTest {
             .andExpect(jsonPath("$.studentProgress[0].studentId").value(7))
             .andExpect(jsonPath("$.milestoneProgress[0].milestoneId").value(11))
             .andExpect(jsonPath("$.pendingTaskSuggestions").isArray());
+    }
+
+    @Test
+    void returnsResearchRecordsForTheRequestedProject() throws Exception {
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(3L);
+        decision.setProjectId(1L);
+        decision.setTitle("Keep the baseline");
+        decision.setStatus(ResearchDecisionStatus.ACTIVE);
+        Experiment experiment = new Experiment();
+        experiment.setId(8L);
+        experiment.setProjectId(1L);
+        experiment.setTitle("Bias audit");
+        Result result = new Result();
+        result.setId(9L);
+        result.setProjectId(1L);
+        result.setSummary("Gap is 4 points");
+        ResearchEvent earlier = new ResearchEvent();
+        earlier.setId(1L);
+        earlier.setTitle("Meeting held");
+        earlier.setEventType(ResearchEventType.MEETING);
+        ResearchEvent later = new ResearchEvent();
+        later.setId(2L);
+        later.setTitle("Decision recorded");
+        later.setEventType(ResearchEventType.DECISION);
+        when(researchQueryService.getResearchDecisions(1L)).thenReturn(List.of(decision));
+        when(researchQueryService.getExperiments(1L)).thenReturn(List.of(experiment));
+        when(researchQueryService.getResults(1L)).thenReturn(List.of(result));
+        when(researchQueryService.getResearchEvents(1L)).thenReturn(List.of(earlier, later));
+        when(researchQueryService.getResearchDecisions(2L)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/projects/1/research-decisions"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].title").value("Keep the baseline"))
+            .andExpect(jsonPath("$[0].projectId").value(1));
+        mockMvc.perform(get("/api/projects/1/experiments"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].title").value("Bias audit"));
+        mockMvc.perform(get("/api/projects/1/results"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].summary").value("Gap is 4 points"));
+        mockMvc.perform(get("/api/projects/1/research-events"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].title").value("Meeting held"))
+            .andExpect(jsonPath("$[1].title").value("Decision recorded"));
+        mockMvc.perform(get("/api/projects/2/research-decisions"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isEmpty());
     }
 }

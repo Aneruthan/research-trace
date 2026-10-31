@@ -23,6 +23,8 @@ public class ResearchDecision {
 
     private Long meetingId;
 
+    private Long extractionReviewId;
+
     @Column(nullable = false)
     private String title;
 
@@ -36,6 +38,7 @@ public class ResearchDecision {
     @Column(nullable = false)
     private ResearchDecisionStatus status = ResearchDecisionStatus.ACTIVE;
 
+    @Column(unique = true)
     private Long supersedesDecisionId;
 
     @Column(columnDefinition = "TEXT")
@@ -70,6 +73,14 @@ public class ResearchDecision {
 
     public void setMeetingId(Long meetingId) {
         this.meetingId = meetingId;
+    }
+
+    public Long getExtractionReviewId() {
+        return extractionReviewId;
+    }
+
+    public void setExtractionReviewId(Long extractionReviewId) {
+        this.extractionReviewId = extractionReviewId;
     }
 
     public String getTitle() {
@@ -126,6 +137,10 @@ public class ResearchDecision {
 
     public void setDecidedAt(LocalDate decidedAt) {
         this.decidedAt = decidedAt;
+    }
+
+    public void setDecidedAt(LocalDateTime decidedAt) {
+        this.decidedAt = decidedAt == null ? null : decidedAt.toLocalDate();
     }
 
     public LocalDateTime getCreatedAt() {

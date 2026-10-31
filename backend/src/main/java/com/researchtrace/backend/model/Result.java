@@ -5,11 +5,13 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "result")
 public class Result {
 
     @Id
@@ -113,6 +115,10 @@ public class Result {
 
     public void setObservedAt(LocalDate observedAt) {
         this.observedAt = observedAt;
+    }
+
+    public void setObservedAt(LocalDateTime observedAt) {
+        this.observedAt = observedAt == null ? null : observedAt.toLocalDate();
     }
 
     public LocalDateTime getCreatedAt() {

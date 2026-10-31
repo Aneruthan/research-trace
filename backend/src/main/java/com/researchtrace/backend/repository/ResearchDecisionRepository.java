@@ -11,9 +11,15 @@ public interface ResearchDecisionRepository extends JpaRepository<ResearchDecisi
 
     List<ResearchDecision> findByProjectIdOrderByCreatedAtDesc(Long projectId);
 
+    List<ResearchDecision> findByProjectIdOrderByDecidedAtAsc(Long projectId);
+
     List<ResearchDecision> findByProjectIdAndStatusOrderByCreatedAtDesc(Long projectId, ResearchDecisionStatus status);
+
+    List<ResearchDecision> findByProjectIdAndStatus(Long projectId, ResearchDecisionStatus status);
 
     List<ResearchDecision> findByMeetingId(Long meetingId);
 
     Optional<ResearchDecision> findBySupersedesDecisionId(Long supersedesDecisionId);
+
+    List<ResearchDecision> findAllBySupersedesDecisionId(Long supersedesDecisionId);
 }

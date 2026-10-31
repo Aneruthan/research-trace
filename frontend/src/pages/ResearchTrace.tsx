@@ -9,6 +9,7 @@ import {
   supersedeResearchDecision,
   updateResearchChangeStatus,
   type DecisionLineageView,
+  type Experiment,
   type ExtractionReview,
   type MeetingExtraction,
   type ResearchChange,
@@ -17,10 +18,12 @@ import {
   type ResearchEvent,
   type ResearchReviewStatus,
   type ResearchTraceSummary,
+  type Result,
 } from '../api/research'
 import type { Meeting } from '../api/types'
 import { PageHeader } from '../components/common/PageHeader'
 import { ExtractionSections } from '../components/research/ExtractionSections'
+import { PersistedResearch } from '../components/research/PersistedResearch'
 
 const SELECTED_PROJECT_ID = 1
 
@@ -38,9 +41,12 @@ export function ResearchTrace() {
   // Summary & Trace Data
   const [summary, setSummary] = useState<ResearchTraceSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<ResearchEvent[]>([])
   const [decisions, setDecisions] = useState<ResearchDecision[]>([])
   const [changes, setChanges] = useState<ResearchChange[]>([])
+  const [experiments, setExperiments] = useState<Experiment[]>([])
+  const [results, setResults] = useState<Result[]>([])
 
   // Lineage Drilldown
   const [selectedDecisionId, setSelectedDecisionId] = useState<number | null>(null)
@@ -112,15 +118,19 @@ export function ResearchTrace() {
 
   async function refreshSummary(signal?: AbortSignal) {
     setSummaryLoading(true)
+    setSummaryError(null)
     try {
       const data = await getResearchSummary(SELECTED_PROJECT_ID, signal)
       setSummary(data)
       setDecisions(data.decisions ?? [])
       setTimeline(data.timeline ?? [])
       setChanges(data.changes ?? [])
+      setExperiments(data.experiments ?? [])
+      setResults(data.results ?? [])
     } catch (cause: unknown) {
       if (cause instanceof Error && cause.name !== 'AbortError') {
         setErrorMessage(cause.message)
+        setSummaryError(cause.message)
       }
     } finally {
       setSummaryLoading(false)
@@ -167,7 +177,7 @@ export function ResearchTrace() {
   }
 
   async function handleViewLineage(decisionId: number) {
-    if (selectedDecisionId === decisionId && lineage) {
+    if (selectedDecisionId === decisionId) {
       setSelectedDecisionId(null)
       setLineage(null)
       return
@@ -184,28 +194,25 @@ export function ResearchTrace() {
     }
   }
 
-  function handleOpenSupersede(decision: ResearchDecision) {
-    setSupersedeTarget(decision)
-    setSupersedeTitle(`Pivot from ${decision.title}`)
+  function handleOpenSupersede(target: ResearchDecision) {
+    setSupersedeTarget(target)
+    setSupersedeTitle('')
     setSupersedeRationale('')
     setSupersedeModalOpen(true)
   }
 
   async function handleConfirmSupersede() {
-    if (!supersedeTarget || !supersedeTitle.trim() || !supersedeRationale.trim()) {
-      setErrorMessage('Please provide a title and rationale explaining the decision change.')
-      return
-    }
+    if (!supersedeTarget || !supersedeTarget.id || !supersedeTitle.trim() || !supersedeRationale.trim()) return
     setSupersedeSubmitting(true)
-    setErrorMessage(null)
     try {
       await supersedeResearchDecision(SELECTED_PROJECT_ID, supersedeTarget.id, {
         title: supersedeTitle.trim(),
         rationale: supersedeRationale.trim(),
+        meetingId: meetingId ?? undefined,
       })
-      setStatusMessage(`Decision "${supersedeTarget.title}" successfully superseded by "${supersedeTitle.trim()}".`)
       setSupersedeModalOpen(false)
       setSupersedeTarget(null)
+      setStatusMessage(`Decision "${supersedeTarget.title}" was superseded by "${supersedeTitle.trim()}".`)
       await refreshSummary()
     } catch (cause: unknown) {
       setErrorMessage(cause instanceof Error ? cause.message : 'Could not supersede decision')
@@ -231,7 +238,7 @@ export function ResearchTrace() {
     <section className="space-y-6">
       <PageHeader
         title="Research Trace & Lineage"
-        description="Trace research decisions, supporting experiments, results, and direction changes across supervision meetings."
+        description="Extract research information, review decisions, trace supporting experiments, results, and direction changes across supervision meetings."
       />
 
       {/* Metric Overview Cards */}
@@ -256,21 +263,18 @@ export function ResearchTrace() {
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
           <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Flagged Shifts</p>
-          <p className={`mt-1 text-2xl font-bold ${summary && summary.flaggedChanges > 0 ? 'text-amber-600' : 'text-stone-900'}`}>
-            {summaryLoading ? '—' : (summary?.flaggedChanges ?? 0)}
-            <span className="text-xs font-normal text-stone-500"> to review</span>
-          </p>
+          <p className="mt-1 text-2xl font-bold text-amber-700">{summaryLoading ? '—' : (summary?.flaggedChanges ?? 0)}</p>
         </div>
       </div>
 
-      {/* Status Notifications */}
+      {/* Banners */}
       {statusMessage && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-medium text-emerald-800">
           {statusMessage}
         </div>
       )}
       {errorMessage && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-800">
           {errorMessage}
         </div>
       )}
@@ -278,254 +282,152 @@ export function ResearchTrace() {
       {/* Tabs */}
       <div className="border-b border-stone-200">
         <nav className="flex space-x-6">
-          <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} label="Overview & Trace" />
-          <TabButton active={activeTab === 'decisions'} onClick={() => setActiveTab('decisions')} label={`Decisions (${decisions.length})`} />
-          <TabButton active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} label={`Timeline (${timeline.length})`} />
+          <TabButton
+            active={activeTab === 'overview'}
+            onClick={() => setActiveTab('overview')}
+            label="Lineage Tree"
+          />
+          <TabButton
+            active={activeTab === 'decisions'}
+            onClick={() => setActiveTab('decisions')}
+            label={`Decisions (${decisions.length})`}
+          />
+          <TabButton
+            active={activeTab === 'timeline'}
+            onClick={() => setActiveTab('timeline')}
+            label={`Timeline (${timeline.length})`}
+          />
           <TabButton
             active={activeTab === 'changes'}
             onClick={() => setActiveTab('changes')}
-            label={`Detected Changes (${changes.filter((c) => c.status === 'FLAGGED').length})`}
+            label={`Direction Changes (${changes.length})`}
           />
-          <TabButton active={activeTab === 'extraction'} onClick={() => setActiveTab('extraction')} label="AI Meeting Review" />
+          <TabButton
+            active={activeTab === 'extraction'}
+            onClick={() => setActiveTab('extraction')}
+            label="Meeting Extraction & Review"
+          />
         </nav>
       </div>
 
-      {/* TAB 1: OVERVIEW & TRACE */}
+      {/* Tab 1: Lineage Tree & Overview */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-base font-semibold text-stone-950">Scientific Traceability Lineage</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              ResearchTrace answers: <em>Why was a research approach selected? Which experiment evaluated it? What results were obtained? Did later evidence supersede the decision?</em>
+            <h3 className="text-sm font-semibold text-stone-950">Decision Evolution & Pivot Tree</h3>
+            <p className="mt-1 text-xs text-stone-600">
+              Interactive visualization of active research directions and superseded hypotheses.
             </p>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <div className="rounded-md border border-stone-100 bg-stone-50 p-3">
-                <span className="text-xs font-bold text-stone-700 uppercase">1. Decision Rationale</span>
-                <p className="mt-1 text-xs text-stone-600">
-                  Every decision retains supervisor rationale, meeting provenance, and immutable history.
-                </p>
-              </div>
-              <div className="rounded-md border border-stone-100 bg-stone-50 p-3">
-                <span className="text-xs font-bold text-stone-700 uppercase">2. Evidence Linking</span>
-                <p className="mt-1 text-xs text-stone-600">
-                  Decisions guide specific experiments; experiments produce metrics and observations.
-                </p>
-              </div>
-              <div className="rounded-md border border-stone-100 bg-stone-50 p-3">
-                <span className="text-xs font-bold text-stone-700 uppercase">3. Non-Destructive Supersession</span>
-                <p className="mt-1 text-xs text-stone-600">
-                  Strategic pivots link backward to superseded decisions without overwriting past work.
-                </p>
-              </div>
-            </div>
-          </div>
 
-          {/* Quick Active Decisions */}
-          <div className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-stone-950">Active Research Decisions & Evidence</h3>
-              <button
-                type="button"
-                className="text-xs font-medium text-stone-700 hover:text-stone-950 underline"
-                onClick={() => setActiveTab('decisions')}
-              >
-                View all ({decisions.length})
-              </button>
-            </div>
-            {decisions.filter((d) => d.status === 'ACTIVE').length === 0 ? (
-              <p className="mt-3 text-sm text-stone-500">No active decisions recorded yet. Confirm an AI extraction or add one.</p>
+            {summaryLoading ? (
+              <p className="mt-4 text-xs text-stone-500">Loading trace summary…</p>
+            ) : decisions.length === 0 ? (
+              <p className="mt-4 text-xs text-stone-500">No decisions recorded yet. Run a meeting extraction to seed the tree.</p>
             ) : (
-              <div className="mt-4 space-y-3">
+              <div className="mt-6 space-y-4">
                 {decisions
-                  .filter((d) => d.status === 'ACTIVE')
-                  .slice(0, 4)
-                  .map((d) => (
-                    <DecisionCard
-                      key={d.id}
-                      decision={d}
-                      isSelected={selectedDecisionId === d.id}
-                      onViewLineage={() => handleViewLineage(d.id)}
-                      onSupersede={() => handleOpenSupersede(d)}
-                    />
-                  ))}
+                  .filter((d) => d.supersedesDecisionId == null)
+                  .map((root) => {
+                    const successor = decisions.find((d) => d.supersedesDecisionId === root.id)
+                    return (
+                      <div key={root.id} className="rounded-md border border-stone-200 bg-stone-50/50 p-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${root.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {root.status}
+                          </span>
+                          <span className="text-xs font-bold text-stone-900">{root.title}</span>
+                          <span className="text-[11px] text-stone-500">({root.decidedAt ?? 'undated'})</span>
+                        </div>
+                        {root.rationale && <p className="mt-1 text-xs text-stone-600 pl-4 border-l border-stone-300">Rationale: {root.rationale}</p>}
+
+                        {successor && (
+                          <div className="mt-3 ml-6 space-y-2 border-l-2 border-indigo-200 pl-4">
+                            <span className="text-[11px] font-semibold text-indigo-700">&darr; Pivoted to:</span>
+                            <div className="rounded border border-indigo-100 bg-white p-3">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  {successor.status}
+                                </span>
+                                <span className="text-xs font-bold text-stone-900">{successor.title}</span>
+                              </div>
+                              {successor.rationale && (
+                                <p className="mt-1 text-xs text-stone-600">New Direction Rationale: {successor.rationale}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
               </div>
             )}
           </div>
-
-          {/* Inline Lineage Viewer */}
-          {selectedDecisionId != null && (
-            <LineageViewer
-              lineage={lineage}
-              loading={lineageLoading}
-              onClose={() => {
-                setSelectedDecisionId(null)
-                setLineage(null)
-              }}
-            />
-          )}
         </div>
       )}
 
-      {/* TAB 2: ALL DECISIONS */}
+      {/* Tab 2: Decisions & Evidence Lineage */}
       {activeTab === 'decisions' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-stone-950">Recorded Research Decisions</h3>
+              {summaryLoading ? (
+                <p className="text-xs text-stone-500">Loading decisions…</p>
+              ) : decisions.length === 0 ? (
+                <p className="text-xs text-stone-500">No decisions recorded.</p>
+              ) : (
+                decisions.map((d) => (
+                  <DecisionCard
+                    key={d.id}
+                    decision={d}
+                    isSelected={selectedDecisionId === d.id}
+                    onViewLineage={() => d.id != null && void handleViewLineage(d.id)}
+                    onSupersede={() => handleOpenSupersede(d)}
+                  />
+                ))
+              )}
+            </div>
+
             <div>
-              <h3 className="text-sm font-semibold text-stone-950">All Research Decisions</h3>
-              <p className="text-xs text-stone-600">Browse current active decisions and historical superseded decisions.</p>
+              <LineageViewer
+                lineage={lineage}
+                loading={lineageLoading}
+                onClose={() => {
+                  setSelectedDecisionId(null)
+                  setLineage(null)
+                }}
+              />
             </div>
           </div>
-
-          {decisions.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
-              No decisions found. You can extract research decisions from meeting notes in the &ldquo;AI Meeting Review&rdquo; tab.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {decisions.map((d) => (
-                <DecisionCard
-                  key={d.id}
-                  decision={d}
-                  isSelected={selectedDecisionId === d.id}
-                  onViewLineage={() => handleViewLineage(d.id)}
-                  onSupersede={() => handleOpenSupersede(d)}
-                />
-              ))}
-            </div>
-          )}
-
-          {selectedDecisionId != null && (
-            <LineageViewer
-              lineage={lineage}
-              loading={lineageLoading}
-              onClose={() => {
-                setSelectedDecisionId(null)
-                setLineage(null)
-              }}
-            />
-          )}
         </div>
       )}
 
-      {/* TAB 3: TIMELINE */}
+      {/* Tab 3: Timeline */}
       {activeTab === 'timeline' && (
         <div className="rounded-lg border border-stone-200 bg-white p-5">
-          <h3 className="text-sm font-semibold text-stone-950">Chronological Research Event Timeline</h3>
+          <h3 className="text-sm font-semibold text-stone-950">Chronological Research Timeline</h3>
           <p className="mt-1 text-xs text-stone-600">
-            Unified chronological sequence of meetings, decisions, experiments, results, and strategic shifts.
+            Integrated stream of meetings, decisions, experiments, observed results, and pivots.
           </p>
 
-          {timeline.length === 0 ? (
-            <p className="mt-4 text-sm text-stone-500">No events recorded in the timeline yet.</p>
+          {summaryLoading ? (
+            <p className="mt-4 text-xs text-stone-500">Loading timeline…</p>
+          ) : timeline.length === 0 ? (
+            <p className="mt-4 text-xs text-stone-500">No events recorded in this project timeline.</p>
           ) : (
-            <ol className="relative mt-6 border-l border-stone-200 ml-4 space-y-6">
+            <div className="mt-6 relative border-l-2 border-stone-200 ml-4 space-y-6 pl-6">
               {timeline.map((event) => (
-                <li key={event.id} className="ml-6">
-                  <span className="absolute -left-3 flex h-6 w-6 items-center justify-center rounded-full bg-stone-100 ring-4 ring-white">
-                    <EventIcon type={event.eventType} />
-                  </span>
-                  <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <EventTypeBadge type={event.eventType} />
-                        <h4 className="text-sm font-semibold text-stone-900">{event.title}</h4>
-                      </div>
-                      <time className="text-xs text-stone-500">{event.occurredAt?.replace('T', ' ').slice(0, 16)}</time>
-                    </div>
-                    {event.description && <p className="mt-2 text-xs text-stone-700">{event.description}</p>}
-                    {event.sourceReference && (
-                      <p className="mt-1 text-[11px] text-stone-500">
-                        <span className="font-medium">Provenance:</span> {event.sourceReference}
-                      </p>
-                    )}
-                    {event.researchDecisionId && (
-                      <button
-                        type="button"
-                        className="mt-2 text-xs font-medium text-stone-700 hover:text-stone-950 underline"
-                        onClick={() => {
-                          setActiveTab('decisions')
-                          handleViewLineage(event.researchDecisionId!)
-                        }}
-                      >
-                        Inspect Decision Lineage &rarr;
-                      </button>
-                    )}
+                <div key={event.id} className="relative group">
+                  <div className="absolute -left-[31px] top-1.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-stone-900 group-hover:scale-125 transition-transform" />
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <EventTypeBadge type={event.eventType ?? 'MEETING'} />
+                    <span className="text-xs font-semibold text-stone-900">{event.title}</span>
+                    <span className="text-[11px] text-stone-500">{event.occurredAt?.slice(0, 10)}</span>
                   </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
-
-      {/* TAB 4: DETECTED CHANGES */}
-      {activeTab === 'changes' && (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-stone-950">Detected Research Direction Changes</h3>
-            <p className="text-xs text-stone-600">
-              The AI change detection engine flags potential shifts in datasets, models, or hypotheses across meetings for supervisor review.
-            </p>
-          </div>
-
-          {changes.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
-              No direction shifts or contradictions detected across meetings.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {changes.map((change) => (
-                <div key={change.id} className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-800">
-                        {change.changeType}
-                      </span>
-                      <h4 className="text-sm font-medium text-stone-900">{change.title}</h4>
-                    </div>
-                    <ChangeStatusBadge status={change.status} />
-                  </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs">
-                    <div className="rounded bg-red-50/50 border border-red-100 p-2 text-stone-700">
-                      <span className="font-semibold text-red-800">Previous Approach:</span>
-                      <p className="mt-0.5">{change.previousApproach ?? 'None specified'}</p>
-                    </div>
-                    <div className="rounded bg-emerald-50/50 border border-emerald-100 p-2 text-stone-700">
-                      <span className="font-semibold text-emerald-800">New Approach:</span>
-                      <p className="mt-0.5">{change.newApproach ?? 'None specified'}</p>
-                    </div>
-                  </div>
-
-                  {change.reason && (
-                    <p className="mt-2 text-xs text-stone-600">
-                      <span className="font-medium text-stone-800">Reason / Evidence:</span> {change.reason}
-                    </p>
+                  {event.description && <p className="mt-1 text-xs text-stone-700">{event.description}</p>}
+                  {event.sourceReference && (
+                    <p className="mt-1 text-[11px] text-stone-500">Ref: {event.sourceReference}</p>
                   )}
-
-                  <div className="mt-3 flex items-center justify-between border-t border-stone-100 pt-2 text-[11px] text-stone-500">
-                    <span>{change.sourceReference ?? 'Source meeting'}</span>
-                    <div className="flex gap-2">
-                      {change.status === 'FLAGGED' && (
-                        <>
-                          <button
-                            type="button"
-                            className="rounded border border-stone-300 bg-white px-2 py-1 font-medium text-stone-700 hover:bg-stone-50"
-                            onClick={() => handleUpdateChangeStatus(change.id, 'REVIEWED')}
-                          >
-                            Mark Reviewed
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-stone-300 bg-white px-2 py-1 font-medium text-stone-500 hover:bg-stone-50"
-                            onClick={() => handleUpdateChangeStatus(change.id, 'DISMISSED')}
-                          >
-                            Dismiss
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -533,57 +435,123 @@ export function ResearchTrace() {
         </div>
       )}
 
-      {/* TAB 5: AI EXTRACTION & REVIEW */}
+      {/* Tab 4: Direction Changes */}
+      {activeTab === 'changes' && (
+        <div className="rounded-lg border border-stone-200 bg-white p-5">
+          <h3 className="text-sm font-semibold text-stone-950">Detected Research Direction Changes</h3>
+          <p className="mt-1 text-xs text-stone-600">
+            Supervision shifts flagged automatically by AI change detection or human pivots.
+          </p>
+
+          {summaryLoading ? (
+            <p className="mt-4 text-xs text-stone-500">Loading direction shifts…</p>
+          ) : changes.length === 0 ? (
+            <p className="mt-4 text-xs text-stone-500">No research direction changes flagged.</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {changes.map((c) => (
+                <div key={c.id} className="rounded-md border border-stone-200 bg-stone-50/50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ChangeStatusBadge status={c.status} />
+                      <span className="text-xs font-bold text-stone-900">{c.title}</span>
+                    </div>
+                    <span className="text-[11px] text-stone-500">Detected: {c.detectedAt?.slice(0, 10)}</span>
+                  </div>
+
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs text-stone-700">
+                    <div className="rounded border border-stone-200 bg-white p-2">
+                      <span className="font-semibold text-stone-500 uppercase text-[10px]">Previous:</span>
+                      <p className="mt-0.5">{c.previousApproach ?? '—'}</p>
+                    </div>
+                    <div className="rounded border border-indigo-200 bg-indigo-50/30 p-2">
+                      <span className="font-semibold text-indigo-700 uppercase text-[10px]">New Pivot:</span>
+                      <p className="mt-0.5">{c.newApproach ?? '—'}</p>
+                    </div>
+                  </div>
+
+                  {c.reason && (
+                    <p className="mt-2 text-xs text-stone-600">
+                      <span className="font-medium text-stone-800">Reason:</span> {c.reason}
+                    </p>
+                  )}
+
+                  {c.status === 'FLAGGED' && (
+                    <div className="mt-3 flex gap-2 border-t border-stone-200 pt-2">
+                      <button
+                        type="button"
+                        className="rounded bg-stone-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-stone-800"
+                        onClick={() => void handleUpdateChangeStatus(c.id, 'REVIEWED')}
+                      >
+                        Confirm as Reviewed
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-100"
+                        onClick={() => void handleUpdateChangeStatus(c.id, 'DISMISSED')}
+                      >
+                        Dismiss Flag
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 5: Meeting Extraction & Human Review */}
       {activeTab === 'extraction' && (
         <div className="space-y-6">
           <div className="rounded-lg border border-stone-200 bg-white p-5">
-            <h3 className="text-sm font-semibold text-stone-950">AI Meeting Extraction & Human Review</h3>
+            <h3 className="text-sm font-semibold text-stone-950">AI Research Extraction & Verification Gate</h3>
             <p className="mt-1 text-xs text-stone-600">
-              Extract structured research decisions, experiments, and results from stored notes.
-              <strong> Human-in-the-loop:</strong> Suggestions remain unverified until accepted or edited.
+              Extract research candidates from supervision transcripts. Extracted items do not enter the research trace until approved by human review.
             </p>
 
-            {meetingsLoading ? <p className="mt-4 text-xs text-stone-600">Loading meetings…</p> : null}
-            {meetingsError ? <p className="mt-4 text-xs text-red-600">{meetingsError}</p> : null}
-
-            {!meetingsLoading && meetings.length > 0 && (
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label className="block text-xs font-medium text-stone-700">
-                  Select Meeting
-                  <select
-                    className="mt-1 block w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 sm:w-80"
-                    value={meetingId ?? ''}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      setMeetingId(value === '' ? null : Number(value))
-                      setExtraction(null)
-                    }}
-                  >
-                    <option value="">Choose a meeting…</option>
-                    {meetings.map((m) => (
-                      <option key={m.id} value={m.id ?? ''}>
-                        {m.title ?? 'Untitled'} ({m.meetingDate ?? 'No date'})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="rounded-md bg-stone-950 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-50"
-                  disabled={meetingId == null || extracting}
-                  onClick={() => void handleExtract()}
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="block text-xs font-medium text-stone-700">
+                Select Meeting Transcript
+                <select
+                  className="mt-1 block w-64 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
+                  value={meetingId ?? ''}
+                  onChange={(e) => setMeetingId(e.target.value ? Number(e.target.value) : null)}
+                  disabled={meetingsLoading}
                 >
-                  {extracting ? 'Extracting…' : 'Extract Research Notes'}
-                </button>
-              </div>
-            )}
+                  <option value="">Choose a meeting…</option>
+                  {meetings.map((m, idx) => (
+                    <option key={m.id ?? idx} value={m.id ?? ''}>
+                      {m.title ?? 'Untitled'} ({m.meetingDate ?? 'No date'})
+                    </option>
+                  ))}
+                </select>
+                {meetingsError && (
+                  <p className="mt-1 text-xs text-rose-600">{meetingsError}</p>
+                )}
+              </label>
+
+              <button
+                type="button"
+                className="rounded-md bg-stone-950 px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
+                disabled={extracting || meetingId == null}
+                onClick={() => void handleExtract()}
+              >
+                {extracting ? 'Extracting with Gemini…' : 'Extract Research with AI'}
+              </button>
+            </div>
           </div>
 
-          {/* Extracted Output for Review */}
+          {/* Current Extraction View with Review Gate */}
           {extraction && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-stone-950">Candidate Suggestions for Verification</h4>
+              <div className="flex flex-wrap items-center justify-between rounded-lg border border-stone-200 bg-stone-50 p-4">
+                <div>
+                  <h4 className="text-sm font-bold text-stone-950">Extracted Suggestions Pending Review</h4>
+                  <p className="text-xs text-stone-600">
+                    Accept to persist verified records into the research trace, or edit/reject.
+                  </p>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -591,11 +559,11 @@ export function ResearchTrace() {
                     disabled={submittingReview != null}
                     onClick={() => void handleReview('ACCEPTED')}
                   >
-                    {submittingReview === 'ACCEPTED' ? 'Promoting…' : 'Accept & Promote to Trace'}
+                    {submittingReview === 'ACCEPTED' ? 'Saving…' : 'Accept All & Persist'}
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-50"
+                    className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-800 disabled:opacity-50"
                     disabled={submittingReview != null}
                     onClick={() => void handleReview('EDITED')}
                   >
@@ -603,7 +571,7 @@ export function ResearchTrace() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
                     disabled={submittingReview != null}
                     onClick={() => void handleReview('REJECTED')}
                   >
@@ -640,6 +608,17 @@ export function ResearchTrace() {
           </div>
         </div>
       )}
+
+      {/* Persisted Research Records Panel */}
+      <PersistedResearch
+        projectId={SELECTED_PROJECT_ID}
+        loading={summaryLoading}
+        error={summaryError}
+        decisions={decisions}
+        experiments={experiments}
+        results={results}
+        events={timeline}
+      />
 
       {/* Supersede Modal */}
       {supersedeModalOpen && supersedeTarget && (
@@ -889,19 +868,4 @@ function ChangeStatusBadge({ status }: { status: string }) {
     DISMISSED: 'bg-stone-100 text-stone-600',
   }
   return <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${map[status] ?? 'bg-stone-100 text-stone-600'}`}>{status}</span>
-}
-
-function EventIcon({ type }: { type: string }) {
-  switch (type) {
-    case 'DECISION':
-      return <span className="text-xs">&#9670;</span>
-    case 'EXPERIMENT':
-      return <span className="text-xs">&#9881;</span>
-    case 'RESULT':
-      return <span className="text-xs">&#10003;</span>
-    case 'CHANGE':
-      return <span className="text-xs">&#8644;</span>
-    default:
-      return <span className="text-xs">&#8226;</span>
-  }
 }

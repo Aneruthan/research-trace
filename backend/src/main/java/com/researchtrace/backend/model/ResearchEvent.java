@@ -25,13 +25,13 @@ public class ResearchEvent {
     private ResearchEventType eventType;
 
     @Column(nullable = false)
+    private LocalDateTime occurredAt;
+
+    @Column(nullable = false)
     private String title;
 
     @Column(columnDefinition = "TEXT")
     private String description;
-
-    @Column(nullable = false)
-    private LocalDateTime occurredAt;
 
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -75,6 +75,14 @@ public class ResearchEvent {
         this.eventType = eventType;
     }
 
+    public LocalDateTime getOccurredAt() {
+        return occurredAt;
+    }
+
+    public void setOccurredAt(LocalDateTime occurredAt) {
+        this.occurredAt = occurredAt;
+    }
+
     public String getTitle() {
         return title;
     }
@@ -89,14 +97,6 @@ public class ResearchEvent {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    public LocalDateTime getOccurredAt() {
-        return occurredAt;
-    }
-
-    public void setOccurredAt(LocalDateTime occurredAt) {
-        this.occurredAt = occurredAt;
     }
 
     public LocalDateTime getCreatedAt() {

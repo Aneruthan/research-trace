@@ -100,65 +100,66 @@ export type ExtractionReview = {
 
 // Persistent Research Domain Types
 export type ResearchDecision = {
-  id: number
-  projectId: number
+  id: number | null
+  projectId: number | null
   meetingId: number | null
-  title: string
+  extractionReviewId?: number | null
+  title: string | null
   decisionText: string | null
   rationale: string | null
-  status: ResearchDecisionStatus
+  status: ResearchDecisionStatus | null
   supersedesDecisionId: number | null
   sourceReference: string | null
   decidedAt: string | null
-  createdAt: string
-  createdByUserId: number | null
+  createdAt?: string | null
+  createdByUserId?: number | null
 }
 
 export type Experiment = {
-  id: number
-  projectId: number
+  id: number | null
+  projectId: number | null
   researchDecisionId: number | null
-  meetingId: number | null
-  title: string
+  meetingId?: number | null
+  title: string | null
   hypothesis: string | null
   method: string | null
-  status: ExperimentStatus
+  status: ExperimentStatus | null
   sourceReference: string | null
   startedAt: string | null
   completedAt: string | null
-  createdAt: string
-  createdByUserId: number | null
+  createdAt?: string | null
+  createdByUserId?: number | null
 }
 
 export type Result = {
-  id: number
-  projectId: number
-  experimentId: number
-  meetingId: number | null
-  summary: string
+  id: number | null
+  projectId: number | null
+  experimentId: number | null
+  meetingId?: number | null
+  summary: string | null
   dataOrMetric: string | null
-  comparison: string | null
+  comparison?: string | null
   sourceReference: string | null
   observedAt: string | null
-  createdAt: string
-  createdByUserId: number | null
+  createdAt?: string | null
+  createdByUserId?: number | null
 }
 
 export type ResearchEvent = {
-  id: number
-  projectId: number
-  eventType: ResearchEventType
-  title: string
+  id: number | null
+  projectId: number | null
+  eventType: ResearchEventType | null
+  title: string | null
   description: string | null
-  occurredAt: string
-  createdAt: string
+  occurredAt: string | null
+  createdAt?: string | null
   meetingId: number | null
   researchDecisionId: number | null
   experimentId: number | null
   resultId: number | null
-  researchChangeId: number | null
+  researchChangeId?: number | null
   sourceReference: string | null
-  createdByUserId: number | null
+  createdByUserId?: number | null
 }
 
 export type ResearchChange = {
@@ -237,6 +238,42 @@ export async function submitResearchReview(
     throw new ApiError(await failureMessage(response, 'Could not save the research review'), response.status)
   }
   return response.json() as Promise<ExtractionReview>
+}
+
+export async function getProjectResearchDecisions(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<ResearchDecision[]> {
+  return getJson(`/api/projects/${projectId}/research-decisions`, signal, `Could not load research decisions for project ${projectId}`)
+}
+
+export async function getProjectExperiments(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<Experiment[]> {
+  return getJson(`/api/projects/${projectId}/experiments`, signal, `Could not load experiments for project ${projectId}`)
+}
+
+export async function getProjectResults(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<Result[]> {
+  return getJson(`/api/projects/${projectId}/results`, signal, `Could not load results for project ${projectId}`)
+}
+
+export async function getProjectResearchEvents(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<ResearchEvent[]> {
+  return getJson(`/api/projects/${projectId}/research-events`, signal, `Could not load research events for project ${projectId}`)
+}
+
+async function getJson<T>(path: string, signal: AbortSignal | undefined, fallback: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { signal })
+  if (!response.ok) {
+    throw new Error(`${fallback} (${response.status})`)
+  }
+  return response.json() as Promise<T>
 }
 
 export async function getResearchReviews(
