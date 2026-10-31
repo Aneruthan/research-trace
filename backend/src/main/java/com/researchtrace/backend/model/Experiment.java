@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -22,22 +23,32 @@ public class Experiment {
 
     private Long researchDecisionId;
 
+    private Long meetingId;
+
     @Column(nullable = false)
     private String title;
 
+    @Column(columnDefinition = "TEXT")
     private String hypothesis;
 
+    @Column(columnDefinition = "TEXT")
     private String method;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ExperimentStatus status;
+    private ExperimentStatus status = ExperimentStatus.PLANNED;
 
-    private LocalDateTime startedAt;
-
-    private LocalDateTime completedAt;
-
+    @Column(columnDefinition = "TEXT")
     private String sourceReference;
+
+    private LocalDate startedAt;
+
+    private LocalDate completedAt;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private Long createdByUserId;
 
     public Long getId() {
         return id;
@@ -61,6 +72,14 @@ public class Experiment {
 
     public void setResearchDecisionId(Long researchDecisionId) {
         this.researchDecisionId = researchDecisionId;
+    }
+
+    public Long getMeetingId() {
+        return meetingId;
+    }
+
+    public void setMeetingId(Long meetingId) {
+        this.meetingId = meetingId;
     }
 
     public String getTitle() {
@@ -95,27 +114,51 @@ public class Experiment {
         this.status = status;
     }
 
-    public LocalDateTime getStartedAt() {
-        return startedAt;
-    }
-
-    public void setStartedAt(LocalDateTime startedAt) {
-        this.startedAt = startedAt;
-    }
-
-    public LocalDateTime getCompletedAt() {
-        return completedAt;
-    }
-
-    public void setCompletedAt(LocalDateTime completedAt) {
-        this.completedAt = completedAt;
-    }
-
     public String getSourceReference() {
         return sourceReference;
     }
 
     public void setSourceReference(String sourceReference) {
         this.sourceReference = sourceReference;
+    }
+
+    public LocalDate getStartedAt() {
+        return startedAt;
+    }
+
+    public void setStartedAt(LocalDate startedAt) {
+        this.startedAt = startedAt;
+    }
+
+    public void setStartedAt(LocalDateTime startedAt) {
+        this.startedAt = startedAt == null ? null : startedAt.toLocalDate();
+    }
+
+    public LocalDate getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDate completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt == null ? null : completedAt.toLocalDate();
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Long getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public void setCreatedByUserId(Long createdByUserId) {
+        this.createdByUserId = createdByUserId;
     }
 }

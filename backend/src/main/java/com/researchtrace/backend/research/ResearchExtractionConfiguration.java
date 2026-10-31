@@ -1,6 +1,8 @@
 package com.researchtrace.backend.research;
 
+import com.researchtrace.backend.ai.GeminiConfigurationValidator;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,14 +11,23 @@ import org.springframework.context.annotation.Configuration;
 public class ResearchExtractionConfiguration {
 
     @Bean
-    @ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "google-genai")
-    public ResearchNotesExtractor geminiResearchNotesExtractor(ChatClient.Builder chatClientBuilder) {
+    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "gemini", matchIfMissing = true)
+    public ResearchNotesExtractor geminiResearchNotesExtractor(
+            ChatClient.Builder chatClientBuilder,
+            @Value("${spring.ai.google.genai.api-key:}") String apiKey) {
+        GeminiConfigurationValidator.validateApiKey(apiKey, "research-extractor.mode");
         return new GeminiResearchNotesExtractor(chatClientBuilder.build());
     }
 
     @Bean
-    @ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "none", matchIfMissing = true)
+    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "unconfigured")
     public ResearchNotesExtractor unconfiguredResearchNotesExtractor() {
         return new UnconfiguredResearchNotesExtractor();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "stub")
+    public ResearchNotesExtractor stubResearchNotesExtractor() {
+        return new StubResearchNotesExtractor();
     }
 }

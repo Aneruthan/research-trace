@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,20 +28,28 @@ public class ResearchDecision {
     @Column(nullable = false)
     private String title;
 
+    @Column(columnDefinition = "TEXT")
     private String decisionText;
 
+    @Column(columnDefinition = "TEXT")
     private String rationale;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ResearchDecisionStatus status;
+    private ResearchDecisionStatus status = ResearchDecisionStatus.ACTIVE;
 
     @Column(unique = true)
     private Long supersedesDecisionId;
 
-    private LocalDateTime decidedAt;
-
+    @Column(columnDefinition = "TEXT")
     private String sourceReference;
+
+    private LocalDate decidedAt;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private Long createdByUserId;
 
     public Long getId() {
         return id;
@@ -114,19 +123,39 @@ public class ResearchDecision {
         this.supersedesDecisionId = supersedesDecisionId;
     }
 
-    public LocalDateTime getDecidedAt() {
-        return decidedAt;
-    }
-
-    public void setDecidedAt(LocalDateTime decidedAt) {
-        this.decidedAt = decidedAt;
-    }
-
     public String getSourceReference() {
         return sourceReference;
     }
 
     public void setSourceReference(String sourceReference) {
         this.sourceReference = sourceReference;
+    }
+
+    public LocalDate getDecidedAt() {
+        return decidedAt;
+    }
+
+    public void setDecidedAt(LocalDate decidedAt) {
+        this.decidedAt = decidedAt;
+    }
+
+    public void setDecidedAt(LocalDateTime decidedAt) {
+        this.decidedAt = decidedAt == null ? null : decidedAt.toLocalDate();
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Long getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public void setCreatedByUserId(Long createdByUserId) {
+        this.createdByUserId = createdByUserId;
     }
 }

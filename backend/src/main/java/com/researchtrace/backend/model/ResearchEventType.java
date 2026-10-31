@@ -7,5 +7,6 @@ public enum ResearchEventType {
     RESULT,
     OBSERVATION,
     HYPOTHESIS,
-    RESEARCH_QUESTION
+    RESEARCH_QUESTION,
+    CHANGE
 }

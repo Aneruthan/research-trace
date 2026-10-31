@@ -30,7 +30,11 @@ public class ResearchEvent {
     @Column(nullable = false)
     private String title;
 
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     private Long meetingId;
 
@@ -40,7 +44,12 @@ public class ResearchEvent {
 
     private Long resultId;
 
+    private Long researchChangeId;
+
+    @Column(columnDefinition = "TEXT")
     private String sourceReference;
+
+    private Long createdByUserId;
 
     public Long getId() {
         return id;
@@ -90,6 +99,14 @@ public class ResearchEvent {
         this.description = description;
     }
 
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public Long getMeetingId() {
         return meetingId;
     }
@@ -122,11 +139,27 @@ public class ResearchEvent {
         this.resultId = resultId;
     }
 
+    public Long getResearchChangeId() {
+        return researchChangeId;
+    }
+
+    public void setResearchChangeId(Long researchChangeId) {
+        this.researchChangeId = researchChangeId;
+    }
+
     public String getSourceReference() {
         return sourceReference;
     }
 
     public void setSourceReference(String sourceReference) {
         this.sourceReference = sourceReference;
+    }
+
+    public Long getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public void setCreatedByUserId(Long createdByUserId) {
+        this.createdByUserId = createdByUserId;
     }
 }

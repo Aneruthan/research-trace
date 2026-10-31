@@ -1,7 +1,21 @@
 import { API_BASE_URL } from './config'
+import type { Meeting } from './types'
 
 export type ResearchReviewStatus = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED'
+export type ResearchDecisionStatus = 'ACTIVE' | 'SUPERSEDED'
+export type ExperimentStatus = 'PLANNED' | 'RUNNING' | 'COMPLETED'
+export type ResearchEventType =
+  | 'MEETING'
+  | 'DECISION'
+  | 'EXPERIMENT'
+  | 'RESULT'
+  | 'OBSERVATION'
+  | 'HYPOTHESIS'
+  | 'RESEARCH_QUESTION'
+  | 'CHANGE'
+export type ResearchChangeStatus = 'FLAGGED' | 'REVIEWED' | 'DISMISSED'
 
+// Extracted DTO types from AI
 export type ExtractedResearchTask = {
   title: string | null
   description: string | null
@@ -84,68 +98,110 @@ export type ExtractionReview = {
   createdAt: string | null
 }
 
-export type ResearchDecisionStatus = 'ACTIVE' | 'SUPERSEDED'
-
-export type ExperimentStatus = 'PLANNED' | 'RUNNING' | 'COMPLETED'
-
-export type ResearchEventType =
-  | 'MEETING'
-  | 'DECISION'
-  | 'EXPERIMENT'
-  | 'RESULT'
-  | 'OBSERVATION'
-  | 'HYPOTHESIS'
-  | 'RESEARCH_QUESTION'
-
+// Persistent Research Domain Types
 export type ResearchDecision = {
   id: number | null
   projectId: number | null
   meetingId: number | null
-  extractionReviewId: number | null
+  extractionReviewId?: number | null
   title: string | null
   decisionText: string | null
   rationale: string | null
   status: ResearchDecisionStatus | null
   supersedesDecisionId: number | null
-  decidedAt: string | null
   sourceReference: string | null
+  decidedAt: string | null
+  createdAt?: string | null
+  createdByUserId?: number | null
 }
 
 export type Experiment = {
   id: number | null
   projectId: number | null
   researchDecisionId: number | null
+  meetingId?: number | null
   title: string | null
   hypothesis: string | null
   method: string | null
   status: ExperimentStatus | null
+  sourceReference: string | null
   startedAt: string | null
   completedAt: string | null
-  sourceReference: string | null
+  createdAt?: string | null
+  createdByUserId?: number | null
 }
 
 export type Result = {
   id: number | null
   projectId: number | null
   experimentId: number | null
+  meetingId?: number | null
   summary: string | null
   dataOrMetric: string | null
-  observedAt: string | null
+  comparison?: string | null
   sourceReference: string | null
+  observedAt: string | null
+  createdAt?: string | null
+  createdByUserId?: number | null
 }
 
 export type ResearchEvent = {
   id: number | null
   projectId: number | null
   eventType: ResearchEventType | null
-  occurredAt: string | null
   title: string | null
   description: string | null
+  occurredAt: string | null
+  createdAt?: string | null
   meetingId: number | null
   researchDecisionId: number | null
   experimentId: number | null
   resultId: number | null
+  researchChangeId?: number | null
   sourceReference: string | null
+  createdByUserId?: number | null
+}
+
+export type ResearchChange = {
+  id: number
+  projectId: number
+  meetingId: number | null
+  changeType: string
+  title: string
+  previousApproach: string | null
+  newApproach: string | null
+  reason: string | null
+  sourceReference: string | null
+  status: ResearchChangeStatus
+  detectedAt: string
+  createdAt: string
+}
+
+export type ExperimentEvidence = {
+  experiment: Experiment
+  results: Result[]
+}
+
+export type DecisionLineageView = {
+  decision: ResearchDecision
+  predecessorDecision: ResearchDecision | null
+  successorDecision: ResearchDecision | null
+  sourceMeeting: Meeting | null
+  experiments: ExperimentEvidence[]
+}
+
+export type ResearchTraceSummary = {
+  totalDecisions: number
+  activeDecisions: number
+  totalExperiments: number
+  completedExperiments: number
+  totalResults: number
+  flaggedChanges: number
+  decisions: ResearchDecision[]
+  experiments: Experiment[]
+  results: Result[]
+  timeline: ResearchEvent[]
+  changes: ResearchChange[]
 }
 
 export class ApiError extends Error {
@@ -157,6 +213,7 @@ export class ApiError extends Error {
   }
 }
 
+// AI Extraction & Human Review API
 export async function extractResearch(meetingId: number): Promise<MeetingExtraction> {
   const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/research-extraction`, {
     method: 'POST',
@@ -228,6 +285,140 @@ export async function getResearchReviews(
     throw new ApiError(await failureMessage(response, 'Could not load research reviews'), response.status)
   }
   return response.json() as Promise<ExtractionReview[]>
+}
+
+// Research Trace & Domain APIs (/api/projects/{projectId}/research)
+
+export async function getResearchSummary(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<ResearchTraceSummary> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/research/summary`, { signal })
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not load research summary'), response.status)
+  }
+  return response.json() as Promise<ResearchTraceSummary>
+}
+
+export async function getResearchDecisions(
+  projectId: number,
+  status?: ResearchDecisionStatus,
+  signal?: AbortSignal,
+): Promise<ResearchDecision[]> {
+  const url = status
+    ? `${API_BASE_URL}/api/projects/${projectId}/research/decisions?status=${status}`
+    : `${API_BASE_URL}/api/projects/${projectId}/research/decisions`
+  const response = await fetch(url, { signal })
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not load decisions'), response.status)
+  }
+  return response.json() as Promise<ResearchDecision[]>
+}
+
+export async function createResearchDecision(
+  projectId: number,
+  request: {
+    title: string
+    decisionText?: string
+    rationale?: string
+    meetingId?: number
+    sourceReference?: string
+    decidedAt?: string
+  },
+): Promise<ResearchDecision> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/research/decisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not create research decision'), response.status)
+  }
+  return response.json() as Promise<ResearchDecision>
+}
+
+export async function supersedeResearchDecision(
+  projectId: number,
+  decisionId: number,
+  request: {
+    title: string
+    rationale: string
+    decisionText?: string
+    meetingId?: number
+    sourceReference?: string
+    decidedAt?: string
+  },
+): Promise<ResearchDecision> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/research/decisions/${decisionId}/supersede`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    },
+  )
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not supersede research decision'), response.status)
+  }
+  return response.json() as Promise<ResearchDecision>
+}
+
+export async function getDecisionLineage(
+  projectId: number,
+  decisionId: number,
+  signal?: AbortSignal,
+): Promise<DecisionLineageView> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/research/decisions/${decisionId}/lineage`,
+    { signal },
+  )
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not load decision lineage'), response.status)
+  }
+  return response.json() as Promise<DecisionLineageView>
+}
+
+export async function getResearchTimeline(
+  projectId: number,
+  signal?: AbortSignal,
+): Promise<ResearchEvent[]> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/research/timeline`, { signal })
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not load research timeline'), response.status)
+  }
+  return response.json() as Promise<ResearchEvent[]>
+}
+
+export async function getResearchChanges(
+  projectId: number,
+  status?: ResearchChangeStatus,
+  signal?: AbortSignal,
+): Promise<ResearchChange[]> {
+  const url = status
+    ? `${API_BASE_URL}/api/projects/${projectId}/research/changes?status=${status}`
+    : `${API_BASE_URL}/api/projects/${projectId}/research/changes`
+  const response = await fetch(url, { signal })
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not load research changes'), response.status)
+  }
+  return response.json() as Promise<ResearchChange[]>
+}
+
+export async function updateResearchChangeStatus(
+  projectId: number,
+  changeId: number,
+  status: ResearchChangeStatus,
+): Promise<ResearchChange> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/research/changes/${changeId}/status?status=${status}`,
+    {
+      method: 'PUT',
+    },
+  )
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not update change status'), response.status)
+  }
+  return response.json() as Promise<ResearchChange>
 }
 
 async function failureMessage(response: Response, fallback: string): Promise<string> {

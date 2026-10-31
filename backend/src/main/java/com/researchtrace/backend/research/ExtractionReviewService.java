@@ -23,16 +23,19 @@ public class ExtractionReviewService {
     private final MeetingService meetingService;
     private final JsonMapper jsonMapper;
     private final AcceptedReviewRecorder acceptedReviewRecorder;
+    private final ChangeDetectionService changeDetectionService;
 
     public ExtractionReviewService(
             ExtractionReviewRepository extractionReviewRepository,
             MeetingService meetingService,
             JsonMapper jsonMapper,
-            AcceptedReviewRecorder acceptedReviewRecorder) {
+            AcceptedReviewRecorder acceptedReviewRecorder,
+            @org.springframework.lang.Nullable ChangeDetectionService changeDetectionService) {
         this.extractionReviewRepository = extractionReviewRepository;
         this.meetingService = meetingService;
         this.jsonMapper = jsonMapper;
         this.acceptedReviewRecorder = acceptedReviewRecorder;
+        this.changeDetectionService = changeDetectionService;
     }
 
     @Transactional
@@ -51,9 +54,18 @@ public class ExtractionReviewService {
         review.setExtractionJson(writeExtraction(reviewRequest));
         review.setCreatedAt(LocalDateTime.now());
         ExtractionReview saved = extractionReviewRepository.saveAndFlush(review);
+
         if (saved.getStatus() == ExtractionReviewStatus.ACCEPTED) {
             acceptedReviewRecorder.record(saved, meeting.getProjectId(), reviewRequest.getExtraction());
+            if (changeDetectionService != null && meeting.getProjectId() != null) {
+                changeDetectionService.detectAndFlagChanges(meeting.getProjectId(), meetingId, reviewRequest.getExtraction());
+            }
+        } else if (saved.getStatus() == ExtractionReviewStatus.EDITED) {
+            if (changeDetectionService != null && meeting.getProjectId() != null) {
+                changeDetectionService.detectAndFlagChanges(meeting.getProjectId(), meetingId, reviewRequest.getExtraction());
+            }
         }
+
         return saved;
     }
 
@@ -71,8 +83,8 @@ public class ExtractionReviewService {
     private String writeExtraction(ExtractionReviewRequest reviewRequest) {
         try {
             return jsonMapper.writeValueAsString(reviewRequest.getExtraction());
-        } catch (JacksonException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to store extraction data", exception);
+        } catch (JacksonException cause) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not serialize extraction", cause);
         }
     }
 }

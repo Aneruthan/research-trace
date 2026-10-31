@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react'
 import { getProjectMeetings } from '../api/meetings'
 import {
-  ApiError,
   extractResearch,
-  getProjectExperiments,
-  getProjectResearchDecisions,
-  getProjectResearchEvents,
-  getProjectResults,
+  getDecisionLineage,
   getResearchReviews,
+  getResearchSummary,
   submitResearchReview,
+  supersedeResearchDecision,
+  updateResearchChangeStatus,
+  type DecisionLineageView,
   type Experiment,
   type ExtractionReview,
   type MeetingExtraction,
+  type ResearchChange,
+  type ResearchChangeStatus,
   type ResearchDecision,
   type ResearchEvent,
   type ResearchReviewStatus,
+  type ResearchTraceSummary,
   type Result,
 } from '../api/research'
 import type { Meeting } from '../api/types'
@@ -24,39 +27,57 @@ import { PersistedResearch } from '../components/research/PersistedResearch'
 
 const SELECTED_PROJECT_ID = 1
 
-const REVIEW_STATUSES: ResearchReviewStatus[] = ['PENDING', 'ACCEPTED', 'EDITED', 'REJECTED']
+type ActiveTab = 'overview' | 'timeline' | 'decisions' | 'changes' | 'extraction'
 
 export function ResearchTrace() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
+
+  // Project & Meetings
   const [meetings, setMeetings] = useState<Meeting[]>([])
-  const [meetingsError, setMeetingsError] = useState<string | null>(null)
   const [meetingsLoading, setMeetingsLoading] = useState(true)
+  const [meetingsError, setMeetingsError] = useState<string | null>(null)
   const [meetingId, setMeetingId] = useState<number | null>(null)
 
-  const [extraction, setExtraction] = useState<MeetingExtraction | null>(null)
-  const [extracting, setExtracting] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [actionMessage, setActionMessage] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState<ResearchReviewStatus | null>(null)
-
-  const [reviews, setReviews] = useState<ExtractionReview[]>([])
-  const [reviewsLoading, setReviewsLoading] = useState(false)
-  const [reviewsError, setReviewsError] = useState<string | null>(null)
-
+  // Summary & Trace Data
+  const [summary, setSummary] = useState<ResearchTraceSummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [timeline, setTimeline] = useState<ResearchEvent[]>([])
   const [decisions, setDecisions] = useState<ResearchDecision[]>([])
+  const [changes, setChanges] = useState<ResearchChange[]>([])
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [results, setResults] = useState<Result[]>([])
-  const [events, setEvents] = useState<ResearchEvent[]>([])
-  const [recordsLoading, setRecordsLoading] = useState(true)
-  const [recordsError, setRecordsError] = useState<string | null>(null)
-  const [recordsReload, setRecordsReload] = useState(0)
 
+  // Lineage Drilldown
+  const [selectedDecisionId, setSelectedDecisionId] = useState<number | null>(null)
+  const [lineage, setLineage] = useState<DecisionLineageView | null>(null)
+  const [lineageLoading, setLineageLoading] = useState(false)
+
+  // Supersede modal / form
+  const [supersedeModalOpen, setSupersedeModalOpen] = useState(false)
+  const [supersedeTarget, setSupersedeTarget] = useState<ResearchDecision | null>(null)
+  const [supersedeTitle, setSupersedeTitle] = useState('')
+  const [supersedeRationale, setSupersedeRationale] = useState('')
+  const [supersedeSubmitting, setSupersedeSubmitting] = useState(false)
+
+  // Extraction & Review
+  const [extraction, setExtraction] = useState<MeetingExtraction | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const [reviews, setReviews] = useState<ExtractionReview[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [submittingReview, setSubmittingReview] = useState<ResearchReviewStatus | null>(null)
+
+  // Status banners
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // Load Initial Project Summary & Meetings
   useEffect(() => {
     const controller = new AbortController()
+
     getProjectMeetings(SELECTED_PROJECT_ID, controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) {
-          setMeetings(data)
-        }
+        if (!controller.signal.aborted) setMeetings(data)
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -64,13 +85,15 @@ export function ResearchTrace() {
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) {
-          setMeetingsLoading(false)
-        }
+        if (!controller.signal.aborted) setMeetingsLoading(false)
       })
+
+    refreshSummary(controller.signal)
+
     return () => controller.abort()
   }, [])
 
+  // Load Reviews when Meeting changes
   useEffect(() => {
     if (meetingId == null) {
       setReviews([])
@@ -78,244 +101,771 @@ export function ResearchTrace() {
     }
     const controller = new AbortController()
     setReviewsLoading(true)
-    setReviewsError(null)
     getResearchReviews(meetingId, controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) {
-          setReviews(data)
-        }
+        if (!controller.signal.aborted) setReviews(data)
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setReviewsError(cause instanceof Error ? cause.message : 'Could not load research reviews')
+          setErrorMessage(cause instanceof Error ? cause.message : 'Could not load research reviews')
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) {
-          setReviewsLoading(false)
-        }
+        if (!controller.signal.aborted) setReviewsLoading(false)
       })
     return () => controller.abort()
   }, [meetingId])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    setRecordsLoading(true)
-    setRecordsError(null)
-    Promise.all([
-      getProjectResearchDecisions(SELECTED_PROJECT_ID, controller.signal),
-      getProjectExperiments(SELECTED_PROJECT_ID, controller.signal),
-      getProjectResults(SELECTED_PROJECT_ID, controller.signal),
-      getProjectResearchEvents(SELECTED_PROJECT_ID, controller.signal),
-    ])
-      .then(([loadedDecisions, loadedExperiments, loadedResults, loadedEvents]) => {
-        if (!controller.signal.aborted) {
-          setDecisions(loadedDecisions)
-          setExperiments(loadedExperiments)
-          setResults(loadedResults)
-          setEvents(loadedEvents)
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setRecordsError(cause instanceof Error ? cause.message : 'Could not load persisted research records')
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setRecordsLoading(false)
-        }
-      })
-    return () => controller.abort()
-  }, [recordsReload])
+  async function refreshSummary(signal?: AbortSignal) {
+    setSummaryLoading(true)
+    setSummaryError(null)
+    try {
+      const data = await getResearchSummary(SELECTED_PROJECT_ID, signal)
+      setSummary(data)
+      setDecisions(data.decisions ?? [])
+      setTimeline(data.timeline ?? [])
+      setChanges(data.changes ?? [])
+      setExperiments(data.experiments ?? [])
+      setResults(data.results ?? [])
+    } catch (cause: unknown) {
+      if (cause instanceof Error && cause.name !== 'AbortError') {
+        setErrorMessage(cause.message)
+        setSummaryError(cause.message)
+      }
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
 
   async function handleExtract() {
-    if (meetingId == null) {
-      return
-    }
+    if (meetingId == null) return
     setExtracting(true)
-    setActionError(null)
-    setActionMessage(null)
+    setErrorMessage(null)
+    setStatusMessage(null)
     setExtraction(null)
     try {
       const result = await extractResearch(meetingId)
       setExtraction(result)
-      setActionMessage('Research extraction returned by the backend.')
+      setStatusMessage('Research information extracted. Review suggestions below and confirm or edit.')
     } catch (cause: unknown) {
-      setExtraction(null)
-      setActionError(cause instanceof ApiError || cause instanceof Error
-        ? cause.message
-        : 'Could not extract research information')
+      setErrorMessage(cause instanceof Error ? cause.message : 'Could not extract research information')
     } finally {
       setExtracting(false)
     }
   }
 
   async function handleReview(status: ResearchReviewStatus) {
-    if (meetingId == null || extraction == null) {
-      return
-    }
-    setSubmitting(status)
-    setActionError(null)
-    setActionMessage(null)
+    if (meetingId == null || extraction == null) return
+    setSubmittingReview(status)
+    setErrorMessage(null)
+    setStatusMessage(null)
     try {
       await submitResearchReview(meetingId, status, extraction)
       setReviews(await getResearchReviews(meetingId))
-      setRecordsReload((value) => value + 1)
-      setActionMessage(status === 'ACCEPTED'
-        ? 'Research review saved as ACCEPTED. Persisted records were refreshed. A record appears only when that extraction has enough information to store.'
-        : `Research review saved as ${status}. Review history was updated. This status does not create persisted research records.`)
+      await refreshSummary()
+
+      if (status === 'ACCEPTED' || status === 'EDITED') {
+        setStatusMessage(`Research review saved as ${status}. Verified decisions, experiments, and results are now added to the research trace!`)
+      } else {
+        setStatusMessage(`Research review saved as ${status}. No records were added to the permanent trace.`)
+      }
     } catch (cause: unknown) {
-      setActionError(cause instanceof Error ? cause.message : 'Could not save the research review')
+      setErrorMessage(cause instanceof Error ? cause.message : 'Could not save the research review')
     } finally {
-      setSubmitting(null)
+      setSubmittingReview(null)
+    }
+  }
+
+  async function handleViewLineage(decisionId: number) {
+    if (selectedDecisionId === decisionId) {
+      setSelectedDecisionId(null)
+      setLineage(null)
+      return
+    }
+    setSelectedDecisionId(decisionId)
+    setLineageLoading(true)
+    try {
+      const data = await getDecisionLineage(SELECTED_PROJECT_ID, decisionId)
+      setLineage(data)
+    } catch (cause: unknown) {
+      setErrorMessage(cause instanceof Error ? cause.message : 'Could not load decision lineage')
+    } finally {
+      setLineageLoading(false)
+    }
+  }
+
+  function handleOpenSupersede(target: ResearchDecision) {
+    setSupersedeTarget(target)
+    setSupersedeTitle('')
+    setSupersedeRationale('')
+    setSupersedeModalOpen(true)
+  }
+
+  async function handleConfirmSupersede() {
+    if (!supersedeTarget || !supersedeTarget.id || !supersedeTitle.trim() || !supersedeRationale.trim()) return
+    setSupersedeSubmitting(true)
+    try {
+      await supersedeResearchDecision(SELECTED_PROJECT_ID, supersedeTarget.id, {
+        title: supersedeTitle.trim(),
+        rationale: supersedeRationale.trim(),
+        meetingId: meetingId ?? undefined,
+      })
+      setSupersedeModalOpen(false)
+      setSupersedeTarget(null)
+      setStatusMessage(`Decision "${supersedeTarget.title}" was superseded by "${supersedeTitle.trim()}".`)
+      await refreshSummary()
+    } catch (cause: unknown) {
+      setErrorMessage(cause instanceof Error ? cause.message : 'Could not supersede decision')
+    } finally {
+      setSupersedeSubmitting(false)
+    }
+  }
+
+  async function handleUpdateChangeStatus(changeId: number, newStatus: ResearchChangeStatus) {
+    try {
+      await updateResearchChangeStatus(SELECTED_PROJECT_ID, changeId, newStatus)
+      setChanges((prev) =>
+        prev.map((c) => (c.id === changeId ? { ...c, status: newStatus } : c)),
+      )
+      setStatusMessage(`Change status updated to ${newStatus}.`)
+      await refreshSummary()
+    } catch (cause: unknown) {
+      setErrorMessage(cause instanceof Error ? cause.message : 'Could not update change status')
     }
   }
 
   return (
-    <section>
+    <section className="space-y-6">
       <PageHeader
-        title="Research Trace"
-        description="Extract research information from a stored meeting, save a review, and read the research records stored for this project."
+        title="Research Trace & Lineage"
+        description="Extract research information, review decisions, trace supporting experiments, results, and direction changes across supervision meetings."
       />
-      <p className="mt-4 text-sm text-stone-600">
-        Task suggestions stay on the meeting page. Saving a review as ACCEPTED asks the backend to store supported decisions, experiments, results, and timeline events. Other statuses update review history only.
-      </p>
 
-      {meetingsLoading ? <p className="mt-6 text-sm text-stone-600">Loading meetings…</p> : null}
-      {meetingsError ? <Alert message={meetingsError} /> : null}
-      {!meetingsLoading && !meetingsError && meetings.length === 0 ? (
-        <p className="mt-6 text-sm text-stone-500">No meetings for this project.</p>
-      ) : null}
-
-      {!meetingsLoading && meetings.length > 0 ? (
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="block text-xs font-medium text-stone-600">
-            Meeting
-            <select
-              className="mt-1 block w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 sm:w-80"
-              value={meetingId ?? ''}
-              onChange={(event) => {
-                const value = event.target.value
-                setMeetingId(value === '' ? null : Number(value))
-                setExtraction(null)
-                setActionError(null)
-                setActionMessage(null)
-              }}
-            >
-              <option value="">Select a meeting</option>
-              {meetings.map((meeting) => (
-                <option key={meeting.id} value={meeting.id ?? ''}>
-                  {meeting.title ?? 'Untitled meeting'} ({meeting.meetingDate ?? 'no date'})
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="rounded-md bg-stone-950 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            disabled={meetingId == null || extracting}
-            onClick={() => void handleExtract()}
-          >
-            {extracting ? 'Extracting…' : 'Extract research information'}
-          </button>
+      {/* Metric Overview Cards */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
+          <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Decisions</p>
+          <p className="mt-1 text-2xl font-bold text-stone-900">
+            {summaryLoading ? '—' : (summary?.activeDecisions ?? 0)}
+            <span className="text-xs font-normal text-stone-500"> / {summaryLoading ? '—' : (summary?.totalDecisions ?? 0)} active</span>
+          </p>
         </div>
-      ) : null}
+        <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
+          <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Experiments</p>
+          <p className="mt-1 text-2xl font-bold text-stone-900">
+            {summaryLoading ? '—' : (summary?.completedExperiments ?? 0)}
+            <span className="text-xs font-normal text-stone-500"> / {summaryLoading ? '—' : (summary?.totalExperiments ?? 0)} done</span>
+          </p>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
+          <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Results & Metrics</p>
+          <p className="mt-1 text-2xl font-bold text-stone-900">{summaryLoading ? '—' : (summary?.totalResults ?? 0)}</p>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-xs">
+          <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Flagged Shifts</p>
+          <p className="mt-1 text-2xl font-bold text-amber-700">{summaryLoading ? '—' : (summary?.flaggedChanges ?? 0)}</p>
+        </div>
+      </div>
 
-      {actionMessage ? (
-        <p className="mt-4 rounded-md border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800">
-          {actionMessage}
-        </p>
-      ) : null}
-      {actionError ? <Alert message={actionError} /> : null}
+      {/* Banners */}
+      {statusMessage && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-xs font-medium text-emerald-800">
+          {statusMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-800">
+          {errorMessage}
+        </div>
+      )}
 
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-stone-950">Extracted research information</h2>
-        <p className="mt-2 text-sm text-stone-600">
-          This is the current extractor response. It is not a persisted research record until you save it as ACCEPTED.
-        </p>
-        {extraction ? (
-          <div className="mt-4 space-y-4">
-            <ExtractionSections extraction={extraction} />
-            <div className="flex flex-wrap gap-2">
-              {REVIEW_STATUSES.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 disabled:opacity-60"
-                  disabled={submitting != null}
-                  onClick={() => void handleReview(status)}
-                >
-                  {submitting === status ? 'Saving…' : `Save as ${status}`}
-                </button>
-              ))}
+      {/* Tabs */}
+      <div className="border-b border-stone-200">
+        <nav className="flex space-x-6">
+          <TabButton
+            active={activeTab === 'overview'}
+            onClick={() => setActiveTab('overview')}
+            label="Lineage Tree"
+          />
+          <TabButton
+            active={activeTab === 'decisions'}
+            onClick={() => setActiveTab('decisions')}
+            label={`Decisions (${decisions.length})`}
+          />
+          <TabButton
+            active={activeTab === 'timeline'}
+            onClick={() => setActiveTab('timeline')}
+            label={`Timeline (${timeline.length})`}
+          />
+          <TabButton
+            active={activeTab === 'changes'}
+            onClick={() => setActiveTab('changes')}
+            label={`Direction Changes (${changes.length})`}
+          />
+          <TabButton
+            active={activeTab === 'extraction'}
+            onClick={() => setActiveTab('extraction')}
+            label="Meeting Extraction & Review"
+          />
+        </nav>
+      </div>
+
+      {/* Tab 1: Lineage Tree & Overview */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="text-sm font-semibold text-stone-950">Decision Evolution & Pivot Tree</h3>
+            <p className="mt-1 text-xs text-stone-600">
+              Interactive visualization of active research directions and superseded hypotheses.
+            </p>
+
+            {summaryLoading ? (
+              <p className="mt-4 text-xs text-stone-500">Loading trace summary…</p>
+            ) : decisions.length === 0 ? (
+              <p className="mt-4 text-xs text-stone-500">No decisions recorded yet. Run a meeting extraction to seed the tree.</p>
+            ) : (
+              <div className="mt-6 space-y-4">
+                {decisions
+                  .filter((d) => d.supersedesDecisionId == null)
+                  .map((root) => {
+                    const successor = decisions.find((d) => d.supersedesDecisionId === root.id)
+                    return (
+                      <div key={root.id} className="rounded-md border border-stone-200 bg-stone-50/50 p-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${root.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {root.status}
+                          </span>
+                          <span className="text-xs font-bold text-stone-900">{root.title}</span>
+                          <span className="text-[11px] text-stone-500">({root.decidedAt ?? 'undated'})</span>
+                        </div>
+                        {root.rationale && <p className="mt-1 text-xs text-stone-600 pl-4 border-l border-stone-300">Rationale: {root.rationale}</p>}
+
+                        {successor && (
+                          <div className="mt-3 ml-6 space-y-2 border-l-2 border-indigo-200 pl-4">
+                            <span className="text-[11px] font-semibold text-indigo-700">&darr; Pivoted to:</span>
+                            <div className="rounded border border-indigo-100 bg-white p-3">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  {successor.status}
+                                </span>
+                                <span className="text-xs font-bold text-stone-900">{successor.title}</span>
+                              </div>
+                              {successor.rationale && (
+                                <p className="mt-1 text-xs text-stone-600">New Direction Rationale: {successor.rationale}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Decisions & Evidence Lineage */}
+      {activeTab === 'decisions' && (
+        <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-stone-950">Recorded Research Decisions</h3>
+              {summaryLoading ? (
+                <p className="text-xs text-stone-500">Loading decisions…</p>
+              ) : decisions.length === 0 ? (
+                <p className="text-xs text-stone-500">No decisions recorded.</p>
+              ) : (
+                decisions.map((d) => (
+                  <DecisionCard
+                    key={d.id}
+                    decision={d}
+                    isSelected={selectedDecisionId === d.id}
+                    onViewLineage={() => d.id != null && void handleViewLineage(d.id)}
+                    onSupersede={() => handleOpenSupersede(d)}
+                  />
+                ))
+              )}
+            </div>
+
+            <div>
+              <LineageViewer
+                lineage={lineage}
+                loading={lineageLoading}
+                onClose={() => {
+                  setSelectedDecisionId(null)
+                  setLineage(null)
+                }}
+              />
             </div>
           </div>
-        ) : (
-          <p className="mt-3 text-sm text-stone-500">Select a meeting and extract to see the response here.</p>
-        )}
-      </section>
+        </div>
+      )}
 
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-stone-950">Review history</h2>
-        <p className="mt-2 text-sm text-stone-600">
-          Each saved review keeps its status, timestamp, and extraction JSON. That status is not the same as a stored decision, experiment, result, or event.
-        </p>
-        {meetingId == null ? <p className="mt-3 text-sm text-stone-500">Select a meeting to see its reviews.</p> : null}
-        {reviewsLoading ? <p className="mt-3 text-sm text-stone-600">Loading reviews…</p> : null}
-        {reviewsError ? <Alert message={reviewsError} /> : null}
-        {meetingId != null && !reviewsLoading && !reviewsError && reviews.length === 0 ? (
-          <p className="mt-3 text-sm text-stone-500">No saved research reviews for this meeting.</p>
-        ) : null}
-        {reviews.length > 0 ? (
-          <ul className="mt-3 space-y-3">
-            {reviews.map((review) => (
-              <li key={review.id ?? review.createdAt} className="rounded-lg border border-stone-200 bg-white p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-medium text-stone-950">{review.status ?? 'No status'}</p>
-                  <p className="text-xs text-stone-500">{review.createdAt ?? 'No timestamp'}</p>
+      {/* Tab 3: Timeline */}
+      {activeTab === 'timeline' && (
+        <div className="rounded-lg border border-stone-200 bg-white p-5">
+          <h3 className="text-sm font-semibold text-stone-950">Chronological Research Timeline</h3>
+          <p className="mt-1 text-xs text-stone-600">
+            Integrated stream of meetings, decisions, experiments, observed results, and pivots.
+          </p>
+
+          {summaryLoading ? (
+            <p className="mt-4 text-xs text-stone-500">Loading timeline…</p>
+          ) : timeline.length === 0 ? (
+            <p className="mt-4 text-xs text-stone-500">No events recorded in this project timeline.</p>
+          ) : (
+            <div className="mt-6 relative border-l-2 border-stone-200 ml-4 space-y-6 pl-6">
+              {timeline.map((event) => (
+                <div key={event.id} className="relative group">
+                  <div className="absolute -left-[31px] top-1.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-stone-900 group-hover:scale-125 transition-transform" />
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <EventTypeBadge type={event.eventType ?? 'MEETING'} />
+                    <span className="text-xs font-semibold text-stone-900">{event.title}</span>
+                    <span className="text-[11px] text-stone-500">{event.occurredAt?.slice(0, 10)}</span>
+                  </div>
+                  {event.description && <p className="mt-1 text-xs text-stone-700">{event.description}</p>}
+                  {event.sourceReference && (
+                    <p className="mt-1 text-[11px] text-stone-500">Ref: {event.sourceReference}</p>
+                  )}
                 </div>
-                <p className="mt-3 text-xs font-medium text-stone-500">Stored extraction</p>
-                <StoredExtraction json={review.extractionJson} />
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* Tab 4: Direction Changes */}
+      {activeTab === 'changes' && (
+        <div className="rounded-lg border border-stone-200 bg-white p-5">
+          <h3 className="text-sm font-semibold text-stone-950">Detected Research Direction Changes</h3>
+          <p className="mt-1 text-xs text-stone-600">
+            Supervision shifts flagged automatically by AI change detection or human pivots.
+          </p>
+
+          {summaryLoading ? (
+            <p className="mt-4 text-xs text-stone-500">Loading direction shifts…</p>
+          ) : changes.length === 0 ? (
+            <p className="mt-4 text-xs text-stone-500">No research direction changes flagged.</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {changes.map((c) => (
+                <div key={c.id} className="rounded-md border border-stone-200 bg-stone-50/50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ChangeStatusBadge status={c.status} />
+                      <span className="text-xs font-bold text-stone-900">{c.title}</span>
+                    </div>
+                    <span className="text-[11px] text-stone-500">Detected: {c.detectedAt?.slice(0, 10)}</span>
+                  </div>
+
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs text-stone-700">
+                    <div className="rounded border border-stone-200 bg-white p-2">
+                      <span className="font-semibold text-stone-500 uppercase text-[10px]">Previous:</span>
+                      <p className="mt-0.5">{c.previousApproach ?? '—'}</p>
+                    </div>
+                    <div className="rounded border border-indigo-200 bg-indigo-50/30 p-2">
+                      <span className="font-semibold text-indigo-700 uppercase text-[10px]">New Pivot:</span>
+                      <p className="mt-0.5">{c.newApproach ?? '—'}</p>
+                    </div>
+                  </div>
+
+                  {c.reason && (
+                    <p className="mt-2 text-xs text-stone-600">
+                      <span className="font-medium text-stone-800">Reason:</span> {c.reason}
+                    </p>
+                  )}
+
+                  {c.status === 'FLAGGED' && (
+                    <div className="mt-3 flex gap-2 border-t border-stone-200 pt-2">
+                      <button
+                        type="button"
+                        className="rounded bg-stone-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-stone-800"
+                        onClick={() => void handleUpdateChangeStatus(c.id, 'REVIEWED')}
+                      >
+                        Confirm as Reviewed
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-100"
+                        onClick={() => void handleUpdateChangeStatus(c.id, 'DISMISSED')}
+                      >
+                        Dismiss Flag
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 5: Meeting Extraction & Human Review */}
+      {activeTab === 'extraction' && (
+        <div className="space-y-6">
+          <div className="rounded-lg border border-stone-200 bg-white p-5">
+            <h3 className="text-sm font-semibold text-stone-950">AI Research Extraction & Verification Gate</h3>
+            <p className="mt-1 text-xs text-stone-600">
+              Extract research candidates from supervision transcripts. Extracted items do not enter the research trace until approved by human review.
+            </p>
+
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="block text-xs font-medium text-stone-700">
+                Select Meeting Transcript
+                <select
+                  className="mt-1 block w-64 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
+                  value={meetingId ?? ''}
+                  onChange={(e) => setMeetingId(e.target.value ? Number(e.target.value) : null)}
+                  disabled={meetingsLoading}
+                >
+                  <option value="">Choose a meeting…</option>
+                  {meetings.map((m, idx) => (
+                    <option key={m.id ?? idx} value={m.id ?? ''}>
+                      {m.title ?? 'Untitled'} ({m.meetingDate ?? 'No date'})
+                    </option>
+                  ))}
+                </select>
+                {meetingsError && (
+                  <p className="mt-1 text-xs text-rose-600">{meetingsError}</p>
+                )}
+              </label>
+
+              <button
+                type="button"
+                className="rounded-md bg-stone-950 px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
+                disabled={extracting || meetingId == null}
+                onClick={() => void handleExtract()}
+              >
+                {extracting ? 'Extracting with Gemini…' : 'Extract Research with AI'}
+              </button>
+            </div>
+          </div>
+
+          {/* Current Extraction View with Review Gate */}
+          {extraction && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between rounded-lg border border-stone-200 bg-stone-50 p-4">
+                <div>
+                  <h4 className="text-sm font-bold text-stone-950">Extracted Suggestions Pending Review</h4>
+                  <p className="text-xs text-stone-600">
+                    Accept to persist verified records into the research trace, or edit/reject.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+                    disabled={submittingReview != null}
+                    onClick={() => void handleReview('ACCEPTED')}
+                  >
+                    {submittingReview === 'ACCEPTED' ? 'Saving…' : 'Accept All & Persist'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-800 disabled:opacity-50"
+                    disabled={submittingReview != null}
+                    onClick={() => void handleReview('EDITED')}
+                  >
+                    {submittingReview === 'EDITED' ? 'Saving…' : 'Save as Edited'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                    disabled={submittingReview != null}
+                    onClick={() => void handleReview('REJECTED')}
+                  >
+                    {submittingReview === 'REJECTED' ? 'Rejecting…' : 'Reject Suggestions'}
+                  </button>
+                </div>
+              </div>
+
+              <ExtractionSections extraction={extraction} />
+            </div>
+          )}
+
+          {/* Stored Extraction Reviews */}
+          <div className="rounded-lg border border-stone-200 bg-white p-5">
+            <h4 className="text-sm font-semibold text-stone-950">Review History for Meeting</h4>
+            {meetingId == null ? (
+              <p className="mt-2 text-xs text-stone-500">Select a meeting to inspect past reviews.</p>
+            ) : reviewsLoading ? (
+              <p className="mt-2 text-xs text-stone-500">Loading reviews…</p>
+            ) : reviews.length === 0 ? (
+              <p className="mt-2 text-xs text-stone-500">No saved reviews for this meeting.</p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {reviews.map((r) => (
+                  <li key={r.id} className="rounded-md border border-stone-100 bg-stone-50 p-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-stone-900">{r.status}</span>
+                      <span className="text-stone-500">{r.createdAt?.replace('T', ' ').slice(0, 16)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Persisted Research Records Panel */}
       <PersistedResearch
         projectId={SELECTED_PROJECT_ID}
-        loading={recordsLoading}
-        error={recordsError}
+        loading={summaryLoading}
+        error={summaryError}
         decisions={decisions}
         experiments={experiments}
         results={results}
-        events={events}
+        events={timeline}
       />
+
+      {/* Supersede Modal */}
+      {supersedeModalOpen && supersedeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-base font-semibold text-stone-950">Supersede Research Decision</h3>
+            <p className="mt-1 text-xs text-stone-600">
+              You are superseding: <strong>&ldquo;{supersedeTarget.title}&rdquo;</strong>. The earlier decision will be retained with status <span className="font-semibold text-amber-700">SUPERSEDED</span>.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-medium text-stone-700">
+                New Decision Title
+                <input
+                  type="text"
+                  className="mt-1 block w-full rounded border border-stone-300 px-3 py-1.5 text-xs text-stone-900"
+                  value={supersedeTitle}
+                  onChange={(e) => setSupersedeTitle(e.target.value)}
+                  placeholder="e.g. Switch dataset to LitMedImage"
+                />
+              </label>
+
+              <label className="block text-xs font-medium text-stone-700">
+                Rationale / Justification for Change
+                <textarea
+                  className="mt-1 block w-full rounded border border-stone-300 px-3 py-1.5 text-xs text-stone-900"
+                  rows={3}
+                  value={supersedeRationale}
+                  onChange={(e) => setSupersedeRationale(e.target.value)}
+                  placeholder="Explain what experiment, result, or observation motivated this change..."
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+                onClick={() => setSupersedeModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-stone-950 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+                disabled={supersedeSubmitting || !supersedeTitle.trim() || !supersedeRationale.trim()}
+                onClick={() => void handleConfirmSupersede()}
+              >
+                {supersedeSubmitting ? 'Saving…' : 'Confirm Supersession'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
 
-function StoredExtraction({ json }: { json: string | null }) {
-  if (json == null || json.trim() === '') {
-    return <p className="mt-2 text-sm text-stone-500">No extraction JSON.</p>
-  }
-  try {
-    const parsed = JSON.parse(json) as MeetingExtraction
-    return (
-      <div className="mt-3">
-        <ExtractionSections extraction={parsed} />
-      </div>
-    )
-  } catch {
-    return <pre className="mt-2 overflow-x-auto text-xs text-stone-700">{json}</pre>
-  }
+function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      className={`border-b-2 pb-3 text-sm font-medium transition-colors ${
+        active ? 'border-stone-950 text-stone-950' : 'border-transparent text-stone-500 hover:text-stone-800'
+      }`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  )
 }
 
-function Alert({ message }: { message: string }) {
+function DecisionCard({
+  decision,
+  isSelected,
+  onViewLineage,
+  onSupersede,
+}: {
+  decision: ResearchDecision
+  isSelected: boolean
+  onViewLineage: () => void
+  onSupersede: () => void
+}) {
+  const isSuper = decision.status === 'SUPERSEDED'
   return (
-    <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-      {message}
-    </p>
+    <div className={`rounded-lg border p-4 transition-all ${isSelected ? 'border-stone-950 bg-stone-50/50' : 'border-stone-200 bg-white'}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+              isSuper ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            {decision.status}
+          </span>
+          <h4 className="text-sm font-semibold text-stone-900">{decision.title}</h4>
+        </div>
+        <span className="text-xs text-stone-500">{decision.decidedAt ?? 'Undated'}</span>
+      </div>
+
+      {decision.decisionText && <p className="mt-2 text-xs text-stone-700">{decision.decisionText}</p>}
+      {decision.rationale && (
+        <p className="mt-1 text-xs text-stone-600">
+          <span className="font-medium text-stone-800">Rationale:</span> {decision.rationale}
+        </p>
+      )}
+
+      {decision.sourceReference && (
+        <p className="mt-2 text-[11px] text-stone-500">
+          <span className="font-medium">Provenance:</span> {decision.sourceReference}
+        </p>
+      )}
+
+      <div className="mt-3 flex items-center justify-between border-t border-stone-100 pt-2 text-xs">
+        <button
+          type="button"
+          className="font-medium text-stone-800 hover:text-stone-950 underline"
+          onClick={onViewLineage}
+        >
+          {isSelected ? 'Hide Evidence Chain' : 'Trace Evidence Chain &rarr;'}
+        </button>
+
+        {!isSuper && (
+          <button
+            type="button"
+            className="rounded border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50"
+            onClick={onSupersede}
+          >
+            Supersede Approach
+          </button>
+        )}
+      </div>
+    </div>
   )
+}
+
+function LineageViewer({
+  lineage,
+  loading,
+  onClose,
+}: {
+  lineage: DecisionLineageView | null
+  loading: boolean
+  onClose: () => void
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-stone-200 bg-white p-6 text-center text-sm text-stone-500">
+        Reconstructing decision evidence lineage…
+      </div>
+    )
+  }
+  if (!lineage) return null
+
+  return (
+    <div className="rounded-lg border border-stone-950 bg-stone-50 p-5 shadow-xs">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-bold text-stone-950">Decision Evidence & Provenance Trace</h4>
+        <button type="button" className="text-xs text-stone-500 hover:text-stone-950" onClick={onClose}>
+          Close [&times;]
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {/* Predecessor */}
+        {lineage.predecessorDecision && (
+          <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-xs">
+            <span className="font-semibold text-amber-900 uppercase tracking-wide">Predecessor Decision (Superseded)</span>
+            <p className="mt-1 font-medium text-stone-900">{lineage.predecessorDecision.title}</p>
+            <p className="mt-0.5 text-stone-600">Rationale: {lineage.predecessorDecision.rationale}</p>
+          </div>
+        )}
+
+        {/* Current Decision Focus */}
+        <div className="rounded-md border border-stone-200 bg-white p-3 text-xs shadow-xs">
+          <span className="font-semibold text-stone-900 uppercase tracking-wide">Decision Focus</span>
+          <p className="mt-1 text-sm font-bold text-stone-950">{lineage.decision.title}</p>
+          <p className="mt-1 text-stone-700">{lineage.decision.decisionText}</p>
+          <p className="mt-1 text-stone-600"><span className="font-medium">Why selected:</span> {lineage.decision.rationale}</p>
+          {lineage.sourceMeeting && (
+            <p className="mt-1 text-stone-500">
+              <span className="font-medium">Source Meeting:</span> {lineage.sourceMeeting.title} ({lineage.sourceMeeting.meetingDate})
+            </p>
+          )}
+        </div>
+
+        {/* Supporting Experiments and Results */}
+        <div className="space-y-2">
+          <span className="text-xs font-semibold text-stone-900 uppercase tracking-wide">
+            Supporting Experiments & Evidence ({lineage.experiments.length})
+          </span>
+          {lineage.experiments.length === 0 ? (
+            <p className="text-xs text-stone-500">No experiments directly linked to this decision yet.</p>
+          ) : (
+            lineage.experiments.map((ev, idx) => (
+              <div key={idx} className="rounded-md border border-stone-200 bg-white p-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-stone-900">{ev.experiment.title}</span>
+                  <span className="text-[11px] text-stone-500">{ev.experiment.status}</span>
+                </div>
+                <p className="mt-1 text-stone-600"><span className="font-medium">Hypothesis:</span> {ev.experiment.hypothesis}</p>
+
+                {ev.results.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-stone-100 pt-2">
+                    <span className="font-medium text-stone-700">Observed Results:</span>
+                    {ev.results.map((r) => (
+                      <div key={r.id} className="rounded bg-stone-50 p-2 text-stone-800">
+                        <p className="font-medium">{r.summary}</p>
+                        {r.dataOrMetric && <p className="text-[11px] text-stone-600">Metric: {r.dataOrMetric}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Successor */}
+        {lineage.successorDecision && (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3 text-xs">
+            <span className="font-semibold text-emerald-900 uppercase tracking-wide">Subsequent Decision (Active Pivot)</span>
+            <p className="mt-1 font-medium text-stone-900">{lineage.successorDecision.title}</p>
+            <p className="mt-0.5 text-stone-600">Rationale: {lineage.successorDecision.rationale}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EventTypeBadge({ type }: { type: string }) {
+  const map: Record<string, string> = {
+    DECISION: 'bg-indigo-100 text-indigo-800',
+    EXPERIMENT: 'bg-blue-100 text-blue-800',
+    RESULT: 'bg-emerald-100 text-emerald-800',
+    CHANGE: 'bg-amber-100 text-amber-800',
+    MEETING: 'bg-stone-200 text-stone-800',
+  }
+  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${map[type] ?? 'bg-stone-100 text-stone-800'}`}>{type}</span>
+}
+
+function ChangeStatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    FLAGGED: 'bg-amber-100 text-amber-800',
+    REVIEWED: 'bg-emerald-100 text-emerald-800',
+    DISMISSED: 'bg-stone-100 text-stone-600',
+  }
+  return <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${map[status] ?? 'bg-stone-100 text-stone-600'}`}>{status}</span>
 }

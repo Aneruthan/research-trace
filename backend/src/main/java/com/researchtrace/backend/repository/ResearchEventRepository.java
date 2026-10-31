@@ -13,4 +13,12 @@ public interface ResearchEventRepository extends JpaRepository<ResearchEvent, Lo
     List<ResearchEvent> findByProjectIdOrderByOccurredAtAscIdAsc(Long projectId);
 
     List<ResearchEvent> findByProjectIdAndEventType(Long projectId, ResearchEventType eventType);
+
+    List<ResearchEvent> findByProjectIdOrderByOccurredAtAscCreatedAtAsc(Long projectId);
+
+    List<ResearchEvent> findByMeetingId(Long meetingId);
+
+    List<ResearchEvent> findByResearchDecisionId(Long researchDecisionId);
+
+    List<ResearchEvent> findByExperimentId(Long experimentId);
 }

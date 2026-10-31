@@ -7,10 +7,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "research_result")
+@Table(name = "result")
 public class Result {
 
     @Id
@@ -23,14 +24,26 @@ public class Result {
     @Column(nullable = false)
     private Long experimentId;
 
-    @Column(nullable = false)
+    private Long meetingId;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String summary;
 
+    @Column(columnDefinition = "TEXT")
     private String dataOrMetric;
 
-    private LocalDateTime observedAt;
+    @Column(columnDefinition = "TEXT")
+    private String comparison;
 
+    @Column(columnDefinition = "TEXT")
     private String sourceReference;
+
+    private LocalDate observedAt;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    private Long createdByUserId;
 
     public Long getId() {
         return id;
@@ -56,6 +69,14 @@ public class Result {
         this.experimentId = experimentId;
     }
 
+    public Long getMeetingId() {
+        return meetingId;
+    }
+
+    public void setMeetingId(Long meetingId) {
+        this.meetingId = meetingId;
+    }
+
     public String getSummary() {
         return summary;
     }
@@ -72,12 +93,12 @@ public class Result {
         this.dataOrMetric = dataOrMetric;
     }
 
-    public LocalDateTime getObservedAt() {
-        return observedAt;
+    public String getComparison() {
+        return comparison;
     }
 
-    public void setObservedAt(LocalDateTime observedAt) {
-        this.observedAt = observedAt;
+    public void setComparison(String comparison) {
+        this.comparison = comparison;
     }
 
     public String getSourceReference() {
@@ -86,5 +107,33 @@ public class Result {
 
     public void setSourceReference(String sourceReference) {
         this.sourceReference = sourceReference;
+    }
+
+    public LocalDate getObservedAt() {
+        return observedAt;
+    }
+
+    public void setObservedAt(LocalDate observedAt) {
+        this.observedAt = observedAt;
+    }
+
+    public void setObservedAt(LocalDateTime observedAt) {
+        this.observedAt = observedAt == null ? null : observedAt.toLocalDate();
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Long getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public void setCreatedByUserId(Long createdByUserId) {
+        this.createdByUserId = createdByUserId;
     }
 }
