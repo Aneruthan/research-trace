@@ -119,6 +119,13 @@ class TaskSuggestionServiceIntegrationTest {
         taskSuggestionService.accept(suggestions.get(1).getId(), null);
         flushAndClear();
 
+        assertThat(first.getProjectId()).isEqualTo(PROJECT_ID);
+        assertThat(first.getMeetingId()).isEqualTo(meetingId);
+        assertThat(first.getTaskSuggestionId()).isEqualTo(suggestions.get(0).getId());
+        assertThat(first.getCreatedAt()).isNotNull();
+        assertThat(first.getUpdatedAt()).isNotNull();
+
+        assertThat(taskRepository.findByProjectId(PROJECT_ID)).hasSize(2);
         assertThat(taskRepository.findByMilestoneId(milestoneId))
             .hasSize(2)
             .allMatch(task -> task.getStatus() == TaskStatus.TODO);

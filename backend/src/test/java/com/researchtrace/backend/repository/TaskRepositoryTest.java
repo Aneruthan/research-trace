@@ -8,6 +8,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -135,6 +136,40 @@ class TaskRepositoryTest {
             .isEqualTo(1);
     }
 
+    @Test
+    void findsTasksByProjectId() {
+        Task p1Task = task(MILESTONE_ID, TaskStatus.TODO, "Project 1 Task");
+        p1Task.setProjectId(100L);
+        taskRepository.save(p1Task);
+
+        Task p2Task = task(MILESTONE_ID, TaskStatus.TODO, "Project 2 Task");
+        p2Task.setProjectId(200L);
+        taskRepository.save(p2Task);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Task> p1Tasks = taskRepository.findByProjectId(100L);
+        assertThat(p1Tasks).hasSize(1);
+        assertThat(p1Tasks.get(0).getTitle()).isEqualTo("Project 1 Task");
+        assertThat(p1Tasks.get(0).getCreatedAt()).isNotNull();
+        assertThat(p1Tasks.get(0).getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void findsTasksByMeetingIdAndSuggestionId() {
+        Task task = task(null, TaskStatus.TODO, "Meeting Task");
+        task.setMeetingId(55L);
+        task.setTaskSuggestionId(77L);
+        taskRepository.save(task);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(taskRepository.findByMeetingId(55L)).hasSize(1);
+        assertThat(taskRepository.findByTaskSuggestionId(77L)).hasSize(1);
+    }
+
     private Task task(Long milestoneId, TaskStatus status, String title) {
         return task(milestoneId, STUDENT_ID, status, title);
     }
@@ -148,5 +183,25 @@ class TaskRepositoryTest {
         task.setStatus(status);
         task.setDueDate(LocalDate.of(2026, 9, 25));
         return task;
+    }
+
+    @Test
+    void findsTasksByResearchDecisionAndExperiment() {
+        Task task = task(null, TaskStatus.TODO, "Research Linked Task");
+        task.setProjectId(10L);
+        task.setResearchDecisionId(101L);
+        task.setExperimentId(201L);
+        taskRepository.save(task);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(taskRepository.findByResearchDecisionId(101L)).hasSize(1);
+        assertThat(taskRepository.findByExperimentId(201L)).hasSize(1);
+        assertThat(taskRepository.findByProjectIdAndResearchDecisionId(10L, 101L)).hasSize(1);
+        assertThat(taskRepository.findByProjectIdAndExperimentId(10L, 201L)).hasSize(1);
+
+        assertThat(taskRepository.findByProjectIdAndResearchDecisionId(99L, 101L)).isEmpty();
+        assertThat(taskRepository.findByProjectIdAndExperimentId(99L, 201L)).isEmpty();
     }
 }

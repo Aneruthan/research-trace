@@ -23,6 +23,12 @@ export function SuggestionCard({
   const [assigneeId, setAssigneeId] = useState(suggestion.assigneeId?.toString() ?? '')
   const [milestoneId, setMilestoneId] = useState(suggestion.milestoneId?.toString() ?? '')
   const [dueDate, setDueDate] = useState(suggestion.dueDate ?? '')
+  const [researchDecisionId, setResearchDecisionId] = useState(
+    suggestion.researchDecisionId?.toString() ?? '',
+  )
+  const [experimentId, setExperimentId] = useState(
+    suggestion.experimentId?.toString() ?? '',
+  )
 
   const pending = suggestion.status === 'PENDING'
   const suggestionId = suggestion.id
@@ -49,6 +55,8 @@ export function SuggestionCard({
     setAssigneeId(suggestion.assigneeId?.toString() ?? '')
     setMilestoneId(suggestion.milestoneId?.toString() ?? '')
     setDueDate(suggestion.dueDate ?? '')
+    setResearchDecisionId(suggestion.researchDecisionId?.toString() ?? '')
+    setExperimentId(suggestion.experimentId?.toString() ?? '')
     setEditing(true)
   }
 
@@ -62,6 +70,8 @@ export function SuggestionCard({
       assigneeId: parseOptionalId(assigneeId),
       milestoneId: parseOptionalId(milestoneId),
       dueDate: dueDate.trim() === '' ? null : dueDate.trim(),
+      researchDecisionId: parseOptionalId(researchDecisionId),
+      experimentId: parseOptionalId(experimentId),
     }
     void run(() => onSave(suggestionId, update))
   }
@@ -82,6 +92,18 @@ export function SuggestionCard({
             <Field label="Assignee id" value={assigneeId} onChange={setAssigneeId} />
             <Field label="Milestone id" value={milestoneId} onChange={setMilestoneId} />
             <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Linked Research Decision ID (optional)"
+              value={researchDecisionId}
+              onChange={setResearchDecisionId}
+            />
+            <Field
+              label="Linked Experiment ID (optional)"
+              value={experimentId}
+              onChange={setExperimentId}
+            />
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -112,12 +134,45 @@ export function SuggestionCard({
           {suggestion.description ? (
             <p className="mt-2 text-sm leading-6 text-stone-700">{suggestion.description}</p>
           ) : null}
+          {suggestion.sourceExcerpt ? (
+            <blockquote className="mt-2.5 rounded border-l-2 border-stone-300 bg-stone-50 pl-3 py-1.5 text-xs italic text-stone-700">
+              <span className="font-semibold not-italic text-stone-500">Source: </span>
+              &ldquo;{suggestion.sourceExcerpt}&rdquo;
+            </blockquote>
+          ) : null}
           <dl className="mt-3 grid gap-2 text-xs text-stone-600 sm:grid-cols-2">
-            <div>Assignee: {suggestion.assigneeName ?? '—'}{suggestion.assigneeId != null ? ` (${suggestion.assigneeId})` : ''}</div>
-            <div>Milestone id: {suggestion.milestoneId ?? '—'}</div>
-            <div>Due date: {suggestion.dueDate ?? '—'}</div>
-            <div>Confidence: {suggestion.confidence ?? '—'}</div>
+            <div>
+              <span className="font-medium text-stone-500">Assignee: </span>
+              {suggestion.assigneeName ?? '—'}
+              {suggestion.assigneeId != null ? ` (ID: ${suggestion.assigneeId})` : ''}
+            </div>
+            <div>
+              <span className="font-medium text-stone-500">Milestone ID: </span>
+              {suggestion.milestoneId ?? '—'}
+            </div>
+            <div>
+              <span className="font-medium text-stone-500">Due date: </span>
+              {suggestion.dueDate ?? '—'}
+            </div>
+            <div>
+              <span className="font-medium text-stone-500">Confidence: </span>
+              {suggestion.confidence != null ? `${(suggestion.confidence * 100).toFixed(0)}%` : '—'}
+            </div>
           </dl>
+          {(suggestion.researchDecisionId || suggestion.experimentId) ? (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              {suggestion.researchDecisionId ? (
+                <span className="rounded bg-stone-100 px-2 py-0.5 font-medium text-stone-700">
+                  Decision #{suggestion.researchDecisionId}
+                </span>
+              ) : null}
+              {suggestion.experimentId ? (
+                <span className="rounded bg-stone-100 px-2 py-0.5 font-medium text-stone-700">
+                  Experiment #{suggestion.experimentId}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           {pending && suggestionId != null ? (
             <div className="mt-4 flex flex-wrap gap-2">
               <button

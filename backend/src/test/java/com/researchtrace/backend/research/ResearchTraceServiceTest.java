@@ -21,6 +21,8 @@ import com.researchtrace.backend.repository.ResearchChangeRepository;
 import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import com.researchtrace.backend.repository.ResearchEventRepository;
 import com.researchtrace.backend.repository.ResultRepository;
+import com.researchtrace.backend.model.Task;
+import com.researchtrace.backend.repository.TaskRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,6 +71,9 @@ class ResearchTraceServiceTest {
     @Mock
     private ResearchChangeRepository researchChangeRepository;
 
+    @Mock
+    private TaskRepository taskRepository;
+
     private ResearchTraceService researchTraceService;
 
     @BeforeEach
@@ -80,7 +85,8 @@ class ResearchTraceServiceTest {
             experimentRepository,
             resultRepository,
             researchEventRepository,
-            researchChangeRepository
+            researchChangeRepository,
+            taskRepository
         );
         when(projectRepository.existsById(PROJECT_ID)).thenReturn(true);
     }
@@ -277,6 +283,27 @@ class ResearchTraceServiceTest {
     }
 
     @Test
+    void getTimelineIncludesTaskCompletedEvents() {
+        ResearchEvent taskEvent = new ResearchEvent();
+        taskEvent.setProjectId(PROJECT_ID);
+        taskEvent.setTaskId(123L);
+        taskEvent.setEventType(ResearchEventType.TASK_COMPLETED);
+        taskEvent.setTitle("Task Completed: Run tests");
+        taskEvent.setResearchDecisionId(10L);
+        taskEvent.setOccurredAt(LocalDateTime.of(2026, 10, 15, 10, 0));
+
+        when(researchEventRepository.findByProjectIdOrderByOccurredAtAscCreatedAtAsc(PROJECT_ID))
+            .thenReturn(List.of(taskEvent));
+
+        List<ResearchEvent> timeline = researchTraceService.getTimeline(PROJECT_ID);
+        assertThat(timeline).hasSize(1);
+        ResearchEvent retrieved = timeline.get(0);
+        assertThat(retrieved.getEventType()).isEqualTo(ResearchEventType.TASK_COMPLETED);
+        assertThat(retrieved.getTaskId()).isEqualTo(123L);
+        assertThat(retrieved.getResearchDecisionId()).isEqualTo(10L);
+    }
+
+    @Test
     void getSummaryAggregatesCountsAccurately() {
         ResearchDecision d1 = new ResearchDecision();
         d1.setStatus(ResearchDecisionStatus.ACTIVE);
@@ -300,5 +327,47 @@ class ResearchTraceServiceTest {
         assertThat(summary.getActiveDecisions()).isEqualTo(1);
         assertThat(summary.getTotalExperiments()).isEqualTo(2);
         assertThat(summary.getCompletedExperiments()).isEqualTo(1);
+    }
+
+    @Test
+    void getTasksForDecisionReturnsTasksLinkedToDecision() {
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(100L);
+        decision.setProjectId(PROJECT_ID);
+
+        Task task1 = new Task();
+        task1.setId(501L);
+        task1.setProjectId(PROJECT_ID);
+        task1.setResearchDecisionId(100L);
+
+        when(researchDecisionRepository.findById(100L)).thenReturn(Optional.of(decision));
+        when(taskRepository.findByProjectIdAndResearchDecisionId(PROJECT_ID, 100L))
+            .thenReturn(List.of(task1));
+
+        List<Task> tasks = researchTraceService.getTasksForDecision(PROJECT_ID, 100L);
+
+        assertThat(tasks).containsExactly(task1);
+    }
+
+    @Test
+    void getTasksForDecisionThrowsBadRequestWhenDecisionBelongsToOtherProject() {
+        ResearchDecision otherDecision = new ResearchDecision();
+        otherDecision.setId(100L);
+        otherDecision.setProjectId(OTHER_PROJECT_ID);
+
+        when(researchDecisionRepository.findById(100L)).thenReturn(Optional.of(otherDecision));
+
+        assertThatThrownBy(() -> researchTraceService.getTasksForDecision(PROJECT_ID, 100L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Decision does not belong to project " + PROJECT_ID);
+    }
+
+    @Test
+    void getTasksForDecisionThrowsNotFoundWhenDecisionDoesNotExist() {
+        when(researchDecisionRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> researchTraceService.getTasksForDecision(PROJECT_ID, 999L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Decision not found: 999");
     }
 }

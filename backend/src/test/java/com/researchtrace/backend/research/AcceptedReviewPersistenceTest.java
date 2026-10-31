@@ -120,6 +120,7 @@ class AcceptedReviewPersistenceTest {
                 assertThat(experiment.getHypothesis()).isEqualTo("The baseline has a measurable gap.");
                 assertThat(experiment.getStatus()).isEqualTo(ExperimentStatus.PLANNED);
                 assertThat(experiment.getResearchDecisionId()).isNull();
+                assertThat(experiment.getMeetingId()).isEqualTo(meetingId);
             });
         assertThat(resultRepository.findByProjectId(PROJECT_ID))
             .singleElement()
@@ -127,6 +128,7 @@ class AcceptedReviewPersistenceTest {
                 assertThat(result.getSummary()).isEqualTo("Gender gap is 4 points.");
                 assertThat(result.getDataOrMetric()).isEqualTo("accuracy gap = 0.04");
                 assertThat(result.getExperimentId()).isNotNull();
+                assertThat(result.getMeetingId()).isEqualTo(meetingId);
             });
         assertThat(researchEventRepository.findByProjectIdOrderByOccurredAtAscIdAsc(PROJECT_ID))
             .extracting(event -> event.getEventType())

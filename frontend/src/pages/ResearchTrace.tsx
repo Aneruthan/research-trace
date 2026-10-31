@@ -423,6 +423,21 @@ export function ResearchTrace() {
                     <EventTypeBadge type={event.eventType ?? 'MEETING'} />
                     <span className="text-xs font-semibold text-stone-900">{event.title}</span>
                     <span className="text-[11px] text-stone-500">{event.occurredAt?.slice(0, 10)}</span>
+                    {event.taskId != null && (
+                      <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+                        Task #{event.taskId}
+                      </span>
+                    )}
+                    {event.researchDecisionId != null && (
+                      <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                        Decision #{event.researchDecisionId}
+                      </span>
+                    )}
+                    {event.experimentId != null && (
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                        Experiment #{event.experimentId}
+                      </span>
+                    )}
                   </div>
                   {event.description && <p className="mt-1 text-xs text-stone-700">{event.description}</p>}
                   {event.sourceReference && (
@@ -857,6 +872,7 @@ function EventTypeBadge({ type }: { type: string }) {
     RESULT: 'bg-emerald-100 text-emerald-800',
     CHANGE: 'bg-amber-100 text-amber-800',
     MEETING: 'bg-stone-200 text-stone-800',
+    TASK_COMPLETED: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
   }
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${map[type] ?? 'bg-stone-100 text-stone-800'}`}>{type}</span>
 }

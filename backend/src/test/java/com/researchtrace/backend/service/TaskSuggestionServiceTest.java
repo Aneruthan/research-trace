@@ -23,6 +23,10 @@ import com.researchtrace.backend.repository.ProjectMemberRepository;
 import com.researchtrace.backend.repository.TaskRepository;
 import com.researchtrace.backend.repository.TaskSuggestionRepository;
 import com.researchtrace.backend.repository.UserRepository;
+import com.researchtrace.backend.model.Experiment;
+import com.researchtrace.backend.model.ResearchDecision;
+import com.researchtrace.backend.repository.ExperimentRepository;
+import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,6 +107,12 @@ class TaskSuggestionServiceTest {
     @Mock
     private TaskExtractor taskExtractor;
 
+    @Mock
+    private ResearchDecisionRepository researchDecisionRepository;
+
+    @Mock
+    private ExperimentRepository experimentRepository;
+
     private TaskSuggestionService service;
 
     @BeforeEach
@@ -114,7 +124,9 @@ class TaskSuggestionServiceTest {
             userRepository,
             milestoneRepository,
             taskRepository,
-            taskExtractor);
+            taskExtractor,
+            researchDecisionRepository,
+            experimentRepository);
 
         lenient().when(meetingRepository.findById(MEETING_ID)).thenReturn(Optional.of(meeting(PROJECT_ID)));
 
@@ -415,6 +427,11 @@ class TaskSuggestionServiceTest {
         assertThat(task.getAssigneeId()).isEqualTo(ANERUTHAN_ID);
         assertThat(task.getMilestoneId()).isEqualTo(BASELINE_MILESTONE_ID);
         assertThat(task.getDueDate()).isEqualTo(LocalDate.of(2026, 10, 5));
+        assertThat(task.getProjectId()).isEqualTo(PROJECT_ID);
+        assertThat(task.getMeetingId()).isEqualTo(MEETING_ID);
+        assertThat(task.getTaskSuggestionId()).isEqualTo(SUGGESTION_ID);
+        assertThat(task.getCreatedAt()).isNotNull();
+        assertThat(task.getUpdatedAt()).isNotNull();
         assertThat(created).isSameAs(task);
     }
 
@@ -695,5 +712,124 @@ class TaskSuggestionServiceTest {
         user.setName(name);
         user.setRole(role);
         return user;
+    }
+
+    @Test
+    void acceptLinkedSuggestionPropagatesResearchDecisionAndExperiment() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        when(taskSuggestionRepository.findById(SUGGESTION_ID)).thenReturn(Optional.of(suggestion));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> {
+            Task t = inv.getArgument(0);
+            t.setId(CREATED_TASK_ID);
+            return t;
+        });
+
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(101L);
+        decision.setProjectId(PROJECT_ID);
+        when(researchDecisionRepository.findById(101L)).thenReturn(Optional.of(decision));
+
+        Experiment experiment = new Experiment();
+        experiment.setId(201L);
+        experiment.setProjectId(PROJECT_ID);
+        when(experimentRepository.findById(201L)).thenReturn(Optional.of(experiment));
+
+        AcceptTaskSuggestionRequest request = new AcceptTaskSuggestionRequest(
+            "Linked Task",
+            "Task with research links",
+            ANERUTHAN_ID,
+            BASELINE_MILESTONE_ID,
+            LocalDate.of(2026, 11, 15),
+            101L,
+            201L
+        );
+
+        Task created = service.accept(SUGGESTION_ID, request);
+
+        assertThat(created.getResearchDecisionId()).isEqualTo(101L);
+        assertThat(created.getExperimentId()).isEqualTo(201L);
+        assertThat(created.getProjectId()).isEqualTo(PROJECT_ID);
+        assertThat(created.getMeetingId()).isEqualTo(MEETING_ID);
+        assertThat(created.getTaskSuggestionId()).isEqualTo(SUGGESTION_ID);
+
+        assertThat(suggestion.getResearchDecisionId()).isEqualTo(101L);
+        assertThat(suggestion.getExperimentId()).isEqualTo(201L);
+        assertThat(suggestion.getStatus()).isEqualTo(TaskSuggestionStatus.ACCEPTED);
+        assertThat(suggestion.getAcceptedTaskId()).isEqualTo(CREATED_TASK_ID);
+    }
+
+    @Test
+    void crossProjectDecisionLinkIsRejected() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        when(taskSuggestionRepository.findById(SUGGESTION_ID)).thenReturn(Optional.of(suggestion));
+
+        ResearchDecision otherProjectDecision = new ResearchDecision();
+        otherProjectDecision.setId(999L);
+        otherProjectDecision.setProjectId(OTHER_PROJECT_ID);
+        when(researchDecisionRepository.findById(999L)).thenReturn(Optional.of(otherProjectDecision));
+
+        AcceptTaskSuggestionRequest request = new AcceptTaskSuggestionRequest(
+            "Task title",
+            null,
+            ANERUTHAN_ID,
+            BASELINE_MILESTONE_ID,
+            null,
+            999L,
+            null
+        );
+
+        assertThatThrownBy(() -> service.accept(SUGGESTION_ID, request))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Research decision must belong to the meeting's project");
+    }
+
+    @Test
+    void crossProjectExperimentLinkIsRejected() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        when(taskSuggestionRepository.findById(SUGGESTION_ID)).thenReturn(Optional.of(suggestion));
+
+        Experiment otherProjectExperiment = new Experiment();
+        otherProjectExperiment.setId(888L);
+        otherProjectExperiment.setProjectId(OTHER_PROJECT_ID);
+        when(experimentRepository.findById(888L)).thenReturn(Optional.of(otherProjectExperiment));
+
+        AcceptTaskSuggestionRequest request = new AcceptTaskSuggestionRequest(
+            "Task title",
+            null,
+            ANERUTHAN_ID,
+            BASELINE_MILESTONE_ID,
+            null,
+            null,
+            888L
+        );
+
+        assertThatThrownBy(() -> service.accept(SUGGESTION_ID, request))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Experiment must belong to the meeting's project");
+    }
+
+    @Test
+    void existingSuggestionWithoutResearchLinksContinuesWorking() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        when(taskSuggestionRepository.findById(SUGGESTION_ID)).thenReturn(Optional.of(suggestion));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> {
+            Task t = inv.getArgument(0);
+            t.setId(CREATED_TASK_ID);
+            return t;
+        });
+
+        AcceptTaskSuggestionRequest request = new AcceptTaskSuggestionRequest(
+            "Plain task",
+            "No research links",
+            ANERUTHAN_ID,
+            BASELINE_MILESTONE_ID,
+            LocalDate.of(2026, 11, 20)
+        );
+
+        Task created = service.accept(SUGGESTION_ID, request);
+
+        assertThat(created.getResearchDecisionId()).isNull();
+        assertThat(created.getExperimentId()).isNull();
+        assertThat(created.getStatus()).isEqualTo(TaskStatus.TODO);
     }
 }

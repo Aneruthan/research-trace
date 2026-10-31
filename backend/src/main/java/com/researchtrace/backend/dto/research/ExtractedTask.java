@@ -10,6 +10,8 @@ public class ExtractedTask {
     private LocalDate deadline;
     private Long source;
     private Double confidence;
+    private Long researchDecisionId;
+    private Long experimentId;
 
     public String getTitle() {
         return title;
@@ -57,5 +59,21 @@ public class ExtractedTask {
 
     public void setConfidence(Double confidence) {
         this.confidence = confidence;
+    }
+
+    public Long getResearchDecisionId() {
+        return researchDecisionId;
+    }
+
+    public void setResearchDecisionId(Long researchDecisionId) {
+        this.researchDecisionId = researchDecisionId;
+    }
+
+    public Long getExperimentId() {
+        return experimentId;
+    }
+
+    public void setExperimentId(Long experimentId) {
+        this.experimentId = experimentId;
     }
 }

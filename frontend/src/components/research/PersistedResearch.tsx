@@ -113,6 +113,9 @@ export function PersistedResearch({
                 <Field label="Description" value={event.description} />
                 <Field label="Occurred" value={formatTimestamp(event.occurredAt)} />
                 <Field label="Source" value={event.sourceReference} />
+                {event.taskId != null && <Field label="Task" value={`#${event.taskId}`} />}
+                {event.researchDecisionId != null && <Field label="Decision" value={`#${event.researchDecisionId}`} />}
+                {event.experimentId != null && <Field label="Experiment" value={`#${event.experimentId}`} />}
               </li>
             ))}
           </RecordGroup>

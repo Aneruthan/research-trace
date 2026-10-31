@@ -3,10 +3,10 @@
 ResearchTrace keeps three concerns distinct:
 
 - **Student progress:** work completed by one student.
-- **Project progress:** weighted progress across shared project milestones.
-- **Research trace:** a chronological record of research questions, hypotheses, meetings, decisions, experiments, results, and observations.
+- **Project progress:** weighted progress across shared project milestones and milestone-less tasks.
+- **Research trace:** a chronological record of research questions, hypotheses, meetings, decisions, experiments, results, and research-linked task completions.
 
-All entities can use standard audit fields such as `id`, `createdAt`, and `updatedAt`.
+All entities use standard audit fields such as `id`, `createdAt`, and `updatedAt`.
 
 ## User
 
@@ -42,11 +42,27 @@ All entities can use standard audit fields such as `id`, `createdAt`, and `updat
 
 ## Task
 
-**Purpose:** Represents one unit of work and is the main input for student progress.
+**Purpose:** Represents one unit of work and is the main input for student progress and milestone progress.
 
-**Important fields:** `id`, `projectId`, `milestoneId` (optional), `assignedToUserId`, `title`, `description`, `status` (`TODO`, `IN_PROGRESS`, `COMPLETED`), `dueDate`, `completedAt`. `TaskStatus.COMPLETED` is the completed state; `TODO` and `IN_PROGRESS` do not count as completed.
+**Important fields:** `id`, `projectId`, `milestoneId` (optional), `assignedToUserId`, `meetingId` (optional provenance), `taskSuggestionId` (optional suggestion provenance), `researchDecisionId` (optional research link), `experimentId` (optional experiment link), `title`, `description`, `status` (`TODO`, `IN_PROGRESS`, `COMPLETED`), `dueDate`, `createdAt`, `updatedAt`. `TaskStatus.COMPLETED` is the completed state; `TODO` and `IN_PROGRESS` do not count as completed.
 
-**Relationships:** Each task belongs to one project, has exactly one primary student assignee for the MVP, and may contribute to one shared milestone. A milestone can receive contributions from many tasks, including tasks assigned to different students.
+**Relationships:** Each task belongs to one project, has exactly one primary student assignee, and may contribute to one shared milestone. A task may originate from a supervision `Meeting` or AI `TaskSuggestion`. A task may link to a motivating `ResearchDecision` and/or `Experiment`. Modifying task status records an entry in `TaskHistory`, and completing a research-linked task emits a `TASK_COMPLETED` research event.
+
+## TaskHistory
+
+**Purpose:** Records an immutable audit log of task status transitions.
+
+**Important fields:** `id`, `taskId`, `previousStatus` (nullable for initial creation), `newStatus`, `changedByUserId` (nullable), `changedAt`.
+
+**Relationships:** Belongs to one `Task`. Populated automatically within the same database transaction whenever a task's status changes.
+
+## TaskSuggestion
+
+**Purpose:** Holds an AI-extracted action item from a meeting transcript before human review.
+
+**Important fields:** `id`, `extractionReviewId`, `title`, `description`, `suggestedAssigneeId` (optional), `milestoneId` (optional), `researchDecisionId` (optional), `experimentId` (optional), `status` (`PENDING`, `ACCEPTED`, `REJECTED`).
+
+**Relationships:** Belongs to one `ExtractionReview`. When accepted by a reviewer, instantiates a concrete `Task` preserving provenance and links.
 
 ## Meeting
 
@@ -54,7 +70,7 @@ All entities can use standard audit fields such as `id`, `createdAt`, and `updat
 
 **Important fields:** `id`, `projectId`, `title`, `heldAt`, `notes`, `summary`, `createdByUserId`, `sourceReference`.
 
-**Relationships:** Each meeting belongs to one project and can lead to many research decisions. A related `ResearchEvent` records the meeting in the chronological trace.
+**Relationships:** Each meeting belongs to one project and can lead to many research decisions, experiments, results, and tasks. A related `ResearchEvent` records the meeting in the chronological trace.
 
 ## ResearchDecision
 
@@ -62,31 +78,31 @@ All entities can use standard audit fields such as `id`, `createdAt`, and `updat
 
 **Important fields:** `id`, `projectId`, `meetingId` (optional), `title`, `decisionText`, `rationale`, `status` (`ACTIVE` or `SUPERSEDED`), `supersedesDecisionId` (optional), `decidedAt`, `createdByUserId`, `sourceReference`.
 
-**Relationships:** Each decision belongs to one project and may originate from one meeting. One decision can guide many experiments. If a later decision changes direction, it is saved as a new decision whose `supersedesDecisionId` points to the earlier decision; the earlier decision remains stored with status `SUPERSEDED`. A related `ResearchEvent` adds the decision to the trace.
+**Relationships:** Each decision belongs to one project and may originate from one meeting. One decision can guide many experiments and tasks. If a later decision changes direction, it is saved as a new decision whose `supersedesDecisionId` points to the earlier decision; the earlier decision remains stored with status `SUPERSEDED`. A related `ResearchEvent` adds the decision to the trace.
 
 ## Experiment
 
 **Purpose:** Describes a test or study used to investigate a question or validate a decision.
 
-**Important fields:** `id`, `projectId`, `researchDecisionId` (optional for exploratory work), `title`, `hypothesis`, `method`, `status` (`PLANNED`, `RUNNING`, `COMPLETED`), `startedAt`, `completedAt`, `createdByUserId`, `sourceReference`.
+**Important fields:** `id`, `projectId`, `meetingId` (optional provenance), `researchDecisionId` (optional for exploratory work), `title`, `hypothesis`, `method`, `status` (`PLANNED`, `RUNNING`, `COMPLETED`), `startedAt`, `completedAt`, `createdByUserId`, `sourceReference`.
 
-**Relationships:** Each experiment belongs to one project and may be motivated by one research decision. A decision can guide many experiments, and an experiment can have many results. Important experiment changes are recorded as research events.
+**Relationships:** Each experiment belongs to one project and may be motivated by one research decision and originate from one meeting. A decision can guide many experiments, an experiment can have many results, and tasks can be linked directly to an experiment. Important experiment changes are recorded as research events.
 
 ## Result
 
 **Purpose:** Captures an outcome, metric, observation, or conclusion from an experiment.
 
-**Important fields:** `id`, `projectId`, `experimentId`, `summary`, `dataOrMetric`, `observedAt`, `createdByUserId`, `sourceReference`.
+**Important fields:** `id`, `projectId`, `experimentId`, `meetingId` (optional provenance), `summary`, `dataOrMetric`, `observedAt`, `createdByUserId`, `sourceReference`.
 
-**Relationships:** Each result belongs to one project and one experiment; an experiment can have many results. Results can provide evidence for later decisions. A related research event places the result in the trace.
+**Relationships:** Each result belongs to one project and one experiment; an experiment can have many results. Results can originate from a meeting and provide evidence for later decisions. A related research event places the result in the trace.
 
 ## ResearchEvent
 
 **Purpose:** Provides the chronological research-trace timeline without duplicating detailed records.
 
-**Important fields:** `id`, `projectId`, `eventType` (`MEETING`, `DECISION`, `EXPERIMENT`, `RESULT`, `OBSERVATION`, `HYPOTHESIS`, or `RESEARCH_QUESTION`), `occurredAt`, `title`, `description`, `createdByUserId`, `meetingId`, `researchDecisionId`, `experimentId`, `resultId`, `sourceReference`.
+**Important fields:** `id`, `projectId`, `eventType` (`MEETING`, `DECISION`, `EXPERIMENT`, `RESULT`, `OBSERVATION`, `HYPOTHESIS`, `RESEARCH_QUESTION`, `TASK_COMPLETED`), `occurredAt`, `title`, `description`, `createdByUserId`, `meetingId`, `researchDecisionId`, `experimentId`, `resultId`, `taskId`, `sourceReference`.
 
-**Relationships:** Each event belongs to one project. Meeting, decision, experiment, and result events link to their respective detailed entity and contain only concise timeline information. Observation, hypothesis, and research-question events are recorded directly when a separate MVP entity is unnecessary. Events are ordered by `occurredAt` (then `createdAt`) to form the research trace.
+**Relationships:** Each event belongs to one project. Meeting, decision, experiment, result, and task completion events link to their respective detailed entity and contain concise timeline information. Events are ordered by `occurredAt` (then `createdAt` and `id`) to form the research trace.
 
 ## Important Relationships and Rules
 
@@ -94,24 +110,20 @@ All entities can use standard audit fields such as `id`, `createdAt`, and `updat
 
 Student progress is calculated from the tasks assigned to one student: `completed assigned tasks / total assigned tasks × 100`. Only `COMPLETED` tasks count, and a student with no assigned tasks has progress `0.00`. It remains a distinct concern: work completed by one student, not an input to project progress.
 
-Project progress is not an aggregation of student percentages. Tasks contribute to a shared milestone through their status. Milestone progress is derived, not stored:
+Project progress is not an aggregation of student percentages. Tasks contribute to shared milestones or to the project directly if unassigned to a milestone. Milestone progress is derived dynamically, not stored:
 
-`milestone progress = completed tasks / total tasks × 100`
+`milestone progress = completed tasks in milestone / total tasks in milestone × 100`
 
-Only `COMPLETED` tasks count as completed. If a milestone has no tasks, its progress is `0`. Project progress is then the weighted average of those derived milestone percentages:
+Only `COMPLETED` tasks count as completed. If a milestone has no tasks, its progress is `0.00`. Project progress is then the weighted average combining derived milestone percentages and milestone-less tasks:
 
-`project progress = sum(milestone weight × milestone progress) / sum(positive milestone weights)`
+`project progress = [sum(milestone weight × milestone progress) + (milestoneless progress × weight)] / total weights`
 
-Only positive milestone weights contribute. Null, zero, and negative weights are ignored. If a project has no valid weighted milestones, project progress is `0`.
-
-### Shared project example
-
-In one project, Aneruthan and Gayathri are both linked through `ProjectMember`. A shared milestone, **Experiment Evaluation**, has weight 30. Aneruthan's task is to implement evaluation metrics, while Gayathri's task is to prepare the evaluation dataset. Each task has one primary assignee, but both use the same `milestoneId`. If Aneruthan has `COMPLETED` their task and Gayathri's task is still `TODO` or `IN_PROGRESS`, the milestone progress is `50`. That derived progress is then weighted by 30 in the project average.
+Only positive milestone weights contribute. Null, zero, and negative weights are ignored. If a project has no valid weighted milestones or tasks, project progress is `0.00`.
 
 ### Provenance and decision history
 
-For the MVP, `sourceReference` is a simple text field. It may hold a URL, transcript filename, notebook path, dataset version, report section, or other identifier. No separate source or attachment entity is required. Prior decisions are never deleted when the team changes direction; the newer decision supersedes the earlier record, retaining the full decision history.
+For the MVP, `sourceReference` is a simple text field. It may hold a URL, transcript filename, notebook path, dataset version, report section, or other identifier. Prior decisions are never deleted when the team changes direction; the newer decision supersedes the earlier record, retaining the full decision history.
 
 ### Chronological research trace
 
-Create a `ResearchEvent` for important research activity. A typical chain is: research question → hypothesis → meeting → decision → experiment → result → revised decision. The event links make the supporting records easy to inspect while the timeline stays concise.
+A `ResearchEvent` is created for important research activity. A typical chain is: research question → hypothesis → meeting → decision → experiment → result → linked task completion → revised decision. The event links make the supporting records easy to inspect while the timeline stays concise.

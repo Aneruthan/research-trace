@@ -32,6 +32,10 @@ public class TaskSuggestion {
 
     private Long milestoneId;
 
+    private Long researchDecisionId;
+
+    private Long experimentId;
+
     private LocalDate dueDate;
 
     @Column(columnDefinition = "TEXT")
@@ -107,6 +111,22 @@ public class TaskSuggestion {
 
     public void setMilestoneId(Long milestoneId) {
         this.milestoneId = milestoneId;
+    }
+
+    public Long getResearchDecisionId() {
+        return researchDecisionId;
+    }
+
+    public void setResearchDecisionId(Long researchDecisionId) {
+        this.researchDecisionId = researchDecisionId;
+    }
+
+    public Long getExperimentId() {
+        return experimentId;
+    }
+
+    public void setExperimentId(Long experimentId) {
+        this.experimentId = experimentId;
     }
 
     public LocalDate getDueDate() {
