@@ -1,32 +1,25 @@
-# React + TypeScript + Vite
+# ResearchTrace frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React, TypeScript, and Vite interface for ResearchTrace. It loads project `1` from the Spring Boot API and shows the dashboard, meetings, tasks, milestones, and research trace.
 
-Currently, two official plugins are available:
+Full setup, database variables, and API notes are in the repository root `README.md`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Run locally
 
-## React Compiler
+The backend should already be running at `http://localhost:8080`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open the URL Vite prints. `VITE_API_BASE_URL` overrides the API host. The checked-in `frontend/.env` uses `http://localhost:8080`.
+
+## Build
+
+```powershell
+npm run build
+```
+
+This typechecks with `tsc -b` and then builds the production bundle. There is no separate frontend unit-test script.
