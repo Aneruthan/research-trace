@@ -1,0 +1,12 @@
+.git/
+.gitignore
+.env
+*.log
+node_modules/
+dist/
+target/
+.idea/
+.vscode/
+submission/
+modules/
+*.pdf
