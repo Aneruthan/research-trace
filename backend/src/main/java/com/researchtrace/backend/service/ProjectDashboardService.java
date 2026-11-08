@@ -108,7 +108,7 @@ public class ProjectDashboardService {
             members,
             studentProgress(projectId, members),
             milestones,
-            milestoneProgress(milestones),
+            milestoneProgress(projectId, milestones),
             meetings,
             taskService.getTasksByProject(projectId),
             pendingSuggestions(meetings),
@@ -150,11 +150,11 @@ public class ProjectDashboardService {
             .toList();
     }
 
-    private List<MilestoneProgressItem> milestoneProgress(List<Milestone> milestones) {
+    private List<MilestoneProgressItem> milestoneProgress(Long projectId, List<Milestone> milestones) {
         return milestones.stream()
             .map(milestone -> new MilestoneProgressItem(
                 milestone.getId(),
-                progressService.getMilestoneProgress(milestone.getId())))
+                progressService.getMilestoneProgress(milestone.getId(), milestone.getProjectId() != null ? milestone.getProjectId() : projectId)))
             .toList();
     }
 

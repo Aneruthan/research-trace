@@ -27,7 +27,7 @@ export function Milestones() {
             return { milestone, progress: null }
           }
           try {
-            const progress = await getMilestoneProgress(milestone.id, controller.signal)
+            const progress = await getMilestoneProgress(milestone.id, SELECTED_PROJECT_ID, controller.signal)
             return { milestone, progress }
           } catch {
             return { milestone, progress: null }

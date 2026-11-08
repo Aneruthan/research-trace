@@ -16,7 +16,11 @@ public class StudentController {
     }
 
     @GetMapping("/{studentId}/progress")
-    public BigDecimal getStudentProgress(@PathVariable Long studentId) {
-        return progressService.getStudentProgress(studentId);
+    public BigDecimal getStudentProgress(
+            @PathVariable Long studentId,
+            @RequestParam(required = false) Long projectId) {
+        return projectId != null
+            ? progressService.getStudentProgress(studentId, projectId)
+            : progressService.getStudentProgress(studentId);
     }
 }

@@ -36,14 +36,19 @@ public class MilestoneController {
     @GetMapping("/{id}")
     public Milestone getMilestoneById(@PathVariable Long id) {
         return milestoneService.getMilestoneById(id)
-            .orElseThrow(() -> new RuntimeException("Milestone not found"));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found: " + id));
     }
 
     @GetMapping("/{milestoneId}/progress")
-    public BigDecimal getMilestoneProgress(@PathVariable Long milestoneId) {
-        milestoneService.getMilestoneById(milestoneId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
-        return progressService.getMilestoneProgress(milestoneId);
+    public BigDecimal getMilestoneProgress(
+            @PathVariable Long milestoneId,
+            @RequestParam(required = false) Long projectId) {
+        Milestone milestone = milestoneService.getMilestoneById(milestoneId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found: " + milestoneId));
+        Long effectiveProjectId = projectId != null ? projectId : milestone.getProjectId();
+        return effectiveProjectId != null
+            ? progressService.getMilestoneProgress(milestoneId, effectiveProjectId)
+            : progressService.getMilestoneProgress(milestoneId);
     }
 
     @PutMapping("/{id}")

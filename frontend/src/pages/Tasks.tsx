@@ -80,13 +80,21 @@ export function Tasks() {
     if (task.id == null || task.status === status) {
       return
     }
-    setSavingId(task.id)
+    const targetTaskId = task.id
+    setSavingId(targetTaskId)
     setError(null)
     try {
-      await updateTaskStatus(task, status)
+      const updated = await updateTaskStatus(task, status)
+      // Immediately reflect updated task status in state to guarantee responsive UI
+      setTasks((prev) =>
+        prev.map((t) => (t.id === targetTaskId ? { ...t, status: updated.status ?? status } : t)),
+      )
+      // Refresh authoritative backend progress and aggregates
       await load()
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not update task')
+      // On failure, reload server state to ensure UI remains consistent with persisted database
+      await load().catch(() => {})
     } finally {
       setSavingId(null)
     }
@@ -116,6 +124,8 @@ export function Tasks() {
       .map((e) => [e.id as number, e.title as string]),
   )
 
+  const validTasks = tasks.filter((t): t is Task & { id: number } => t.id != null)
+
   return (
     <section>
       <PageHeader
@@ -124,17 +134,17 @@ export function Tasks() {
       />
       {loading ? <p className="mt-6 text-sm text-stone-600">Loading tasks for project {SELECTED_PROJECT_ID}…</p> : null}
       {!loading && projectProgress != null ? (
-        <p className="mt-4 text-sm text-stone-700">
+        <p className="mt-4 text-sm text-stone-700" data-testid="project-progress-label">
           Project progress from the backend: {projectProgress.toFixed(2)}%
         </p>
       ) : null}
       {!loading && error ? <Alert message={error} /> : null}
-      {!loading && !error && tasks.length === 0 ? (
+      {!loading && !error && validTasks.length === 0 ? (
         <p className="mt-6 text-sm text-stone-500">No tasks for this project.</p>
       ) : null}
-      {!loading && !error && tasks.length > 0 ? (
+      {!loading && !error && validTasks.length > 0 ? (
         <ul className="mt-6 divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-          {tasks.map((task) => {
+          {validTasks.map((task) => {
             const milestoneName = task.milestoneId != null
               ? milestonesMap.get(task.milestoneId) ?? `Milestone #${task.milestoneId}`
               : 'No milestone'
@@ -153,7 +163,8 @@ export function Tasks() {
 
             return (
               <li
-                key={task.id ?? task.title}
+                key={task.id}
+                id={`task-item-${task.id}`}
                 className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
               >
                 <div className="space-y-1">
@@ -202,9 +213,10 @@ export function Tasks() {
                   <label className="sr-only" htmlFor={`status-${task.id}`}>Status</label>
                   <select
                     id={`status-${task.id}`}
+                    data-testid={`status-select-${task.id}`}
                     className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs text-stone-800"
                     value={task.status ?? 'TODO'}
-                    disabled={task.id == null || savingId === task.id}
+                    disabled={savingId === task.id}
                     onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}
                   >
                     <option value="TODO">TODO</option>
