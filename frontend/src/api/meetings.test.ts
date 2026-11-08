@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   createProjectMeeting,
   updateMeeting,
+  deleteMeeting,
   getProjectMeetings,
   getMeeting,
 } from './meetings.ts'
@@ -85,6 +86,57 @@ test('updateMeeting calls PUT on meeting endpoint and merges updates', async () 
     assert.strictEqual(result.id, 42)
     assert.strictEqual(result.title, 'Updated Meeting Title')
     assert(capturedBody.includes('Updated Meeting Title'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('deleteMeeting calls DELETE on meeting endpoint', async () => {
+  const originalFetch = globalThis.fetch
+  let capturedUrl = ''
+  let capturedMethod = ''
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input)
+    capturedMethod = init?.method ?? 'GET'
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+
+  try {
+    await deleteMeeting(42)
+    assert.strictEqual(capturedMethod, 'DELETE')
+    assert(capturedUrl.includes('/api/meetings/42'))
+    assert(!capturedUrl.includes('""'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('deleteMeeting throws informative error when backend rejects deletion', async () => {
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = (async () => {
+    return new Response(
+      JSON.stringify({
+        message: 'Cannot delete meeting with linked research records (tasks, experiments).',
+      }),
+      {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+  }) as typeof fetch
+
+  try {
+    await assert.rejects(
+      async () => {
+        await deleteMeeting(7)
+      },
+      (err: Error) => {
+        assert(err.message.includes('Cannot delete meeting with linked research records'))
+        return true
+      },
+    )
   } finally {
     globalThis.fetch = originalFetch
   }

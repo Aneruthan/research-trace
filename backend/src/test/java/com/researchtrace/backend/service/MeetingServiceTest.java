@@ -1,8 +1,10 @@
 package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.model.Meeting;
+import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.repository.MeetingRepository;
 import com.researchtrace.backend.repository.ProjectRepository;
+import com.researchtrace.backend.repository.TaskRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,11 +31,25 @@ class MeetingServiceTest {
     @Mock
     private ProjectRepository projectRepository;
 
+    @Mock
+    private TaskRepository taskRepository;
+
     private MeetingService meetingService;
 
     @BeforeEach
     void setUp() {
-        meetingService = new MeetingService(meetingRepository, projectRepository);
+        meetingService = new MeetingService(
+                meetingRepository,
+                projectRepository,
+                taskRepository,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     @Test
@@ -149,5 +166,63 @@ class MeetingServiceTest {
         assertThatThrownBy(() -> meetingService.updateMeeting(404L, update))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void deleteMeeting_succeeds_whenNoDependentRecords() {
+        Meeting existing = new Meeting();
+        existing.setId(10L);
+        existing.setProjectId(1L);
+        existing.setTitle("Standalone Meeting");
+
+        when(meetingRepository.findById(10L)).thenReturn(Optional.of(existing));
+        when(taskRepository.findByMeetingId(10L)).thenReturn(List.of());
+
+        meetingService.deleteMeeting(10L, 1L);
+
+        verify(meetingRepository).delete(existing);
+    }
+
+    @Test
+    void deleteMeeting_throwsNotFound_whenMeetingDoesNotExist() {
+        when(meetingRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.deleteMeeting(404L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void deleteMeeting_rejectsDeletion_whenMeetingHasDependentRecords() {
+        Meeting existing = new Meeting();
+        existing.setId(7L);
+        existing.setProjectId(1L);
+        existing.setTitle("ViT-B16 Supervision Meeting");
+
+        when(meetingRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(taskRepository.findByMeetingId(7L)).thenReturn(List.of(new Task()));
+
+        assertThatThrownBy(() -> meetingService.deleteMeeting(7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> {
+                    assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("tasks");
+                    assertThat(ex.getMessage()).contains("Deletion rejected to protect research provenance");
+                });
+
+        verify(meetingRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteMeeting_rejectsCrossProjectDeletion() {
+        Meeting existing = new Meeting();
+        existing.setId(10L);
+        existing.setProjectId(1L);
+
+        when(meetingRepository.findById(10L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> meetingService.deleteMeeting(10L, 2L)) // wrong project!
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 }

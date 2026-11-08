@@ -200,12 +200,6 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.meeting (id, project_id, title, meeting_date, notes)
 VALUES
-  (1, 1, 'Supervision Sync: ViT-B16 Pathology', '2026-10-31', 'Decided: Replace ResNet with ViT-B16 for pathology. Experiment: Benchmarking patch attention on TCGA-BRCA. Result: 93.4% accuracy, 0.96 AUC-ROC. Task: Alex submit report by Nov 15.'),
-  (2, 1, 'Supervision Sync: ViT-B16 Live Test', '2026-10-31', 'Decided: Replace ResNet with ViT-B16 for pathology. Experiment: Benchmarking patch attention on TCGA-BRCA. Result: 93.4% accuracy, 0.96 AUC-ROC. Task: Alex submit report by Nov 15.'),
-  (3, 1, 'Supervision Sync: Rejected Idea', '2026-10-31', 'Proposed discarding all loss functions.'),
-  (4, 1, 'Supervision Sync: Task Planning', '2026-10-31', 'Action: Alex Johnson to implement ViT-B16 preprocessing for Baseline model - reviewed by 2026-11-10. Second: Test learning rate search next week. Dr. Watson will audit ethics.'),
-  (5, 1, 'Sync on loss function', '2026-10-31', 'Alex Johnson to test ViT loss function by 2026-11-15'),
-  (6, 1, 'Sync on dataset duplicates', '2026-10-31', 'Alex Johnson to check dataset duplicates next week.'),
   (7, 1, 'Research Supervision Meeting — ViT-B16 Pathology Progress Review', '2026-11-02', '================================================================================
 RESEARCH SUPERVISION MEETING MINUTES
 Project: Multimodal Biomedical AI (Project ID: 1)

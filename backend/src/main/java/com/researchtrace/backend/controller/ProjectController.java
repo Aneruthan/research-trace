@@ -103,6 +103,14 @@ public class ProjectController {
         return meetingService.createMeeting(projectId, meeting);
     }
 
+    @DeleteMapping("/{projectId}/meetings/{meetingId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMeetingForProject(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId) {
+        meetingService.deleteMeeting(meetingId, projectId);
+    }
+
     @GetMapping("/{projectId}/tasks")
     public List<Task> getTasksByProject(@PathVariable Long projectId) {
         return taskService.getTasksByProject(projectId);

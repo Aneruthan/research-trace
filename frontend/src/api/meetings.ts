@@ -61,3 +61,23 @@ export async function updateMeeting(
   }
   return parseJsonResponse<Meeting>(response, `Could not update meeting ${meetingId}`)
 }
+
+export async function deleteMeeting(meetingId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    let errorDetail = ''
+    try {
+      const data = (await response.json()) as { message?: string; error?: string }
+      errorDetail = data.message || data.error || ''
+    } catch {
+      // Non-JSON error
+    }
+    throw new Error(
+      errorDetail
+        ? `Could not delete meeting ${meetingId}: ${errorDetail}`
+        : `Could not delete meeting ${meetingId} (${response.status})`
+    )
+  }
+}
