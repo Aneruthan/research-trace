@@ -53,14 +53,19 @@ git checkout docker-submission
 cp .env.example .env
 ```
 
-Edit `.env` to configure your Gemini API key (or use offline stub mode):
-- **Live AI Mode:** Set `GEMINI_API_KEY=your_key_here` (from [Google AI Studio](https://aistudio.google.com/)).
-- **Offline Stub Mode:** If you do not have an API key, set:
-  ```ini
-  TASK_EXTRACTOR_MODE=stub
-  RESEARCH_EXTRACTOR_MODE=stub
-  GEMINI_CHAT=none
-  ```
+By default, `.env.example` is configured for **Offline Evaluation Mode** (`TASK_EXTRACTOR_MODE=stub`, `RESEARCH_EXTRACTOR_MODE=stub`, `GEMINI_CHAT=none`). In this mode, no Google Gemini API key or external network access is needed.
+
+To enable live Google Gemini AI extraction:
+1. Obtain an API key from [Google AI Studio](https://aistudio.google.com/).
+2. In `.env`, set:
+   ```ini
+   GEMINI_API_KEY=your_actual_api_key_here
+   GEMINI_MODEL=gemini-3.1-flash-lite
+   GEMINI_CHAT=google-genai
+   TASK_EXTRACTOR_MODE=gemini
+   RESEARCH_EXTRACTOR_MODE=gemini
+   ```
+*(Never commit the `.env` file with live keys to version control.)*
 
 ### Step 2: Build and Launch Containers
 
@@ -103,6 +108,18 @@ curl -f http://localhost:8080/api/projects/1/dashboard
 ```bash
 curl -f http://localhost:8080/api/projects/1/research/summary
 ```
+
+### End-to-End Walkthrough: Meeting Creation, AI Extraction & Research Trace
+
+An evaluator or grader can immediately test the complete human-in-the-loop workflow:
+
+1. **Open the Web UI:** Navigate to [http://localhost:5173](http://localhost:5173) and click **Meetings** in the sidebar navigation.
+2. **Inspect Demonstration Meeting:** Select Meeting #7: *Research Supervision Meeting — ViT-B16 Pathology Progress Review* (~1,210 words of realistic academic supervision dialogue).
+3. **Extract Task Suggestions:** Click **Extract Task Suggestions**. The offline extractor parses 3 structured actions assigned to Alex Johnson with milestones and realistic due dates. Click **Accept** on any suggestion to promote it into a formal project task.
+4. **Extract Research Information:** Click **Extract Research**. The extractor deterministically parses 2 architectural decisions, 2 experiments, 2 empirical benchmark results (labeled with `[Illustrative Demonstration Metric]`), and dataset/model entities.
+5. **Human Review & Decision Acceptance:** Click **Review**, verify the extracted records, and submit with status **ACCEPTED**.
+6. **Traceability Verification:** Navigate to **Research Trace** and **Dashboard** to view the newly linked decisions, experiments, results, timeline events, and updated progress metrics.
+7. **Add / Edit Meetings:** From the Meetings page, click **+ Add Meeting** to create an ad-hoc supervision record, or click **Edit Meeting / Notes** on any meeting details page to edit notes directly.
 
 ### Test Database Persistence Across Restarts
 

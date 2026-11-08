@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getMeeting } from '../api/meetings'
+import { getMeeting, updateMeeting } from '../api/meetings'
 import {
   acceptTaskSuggestion,
   extractTaskSuggestions,
@@ -50,6 +50,60 @@ export function MeetingDetails() {
   // Action Banners
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  // Edit Meeting State
+  const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  function startEditing() {
+    if (!meeting) return
+    setEditTitle(meeting.title ?? '')
+    setEditDate(meeting.meetingDate ?? '')
+    setEditNotes(meeting.notes ?? '')
+    setEditError(null)
+    setIsEditing(true)
+  }
+
+  function cancelEditing() {
+    setIsEditing(false)
+    setEditError(null)
+  }
+
+  async function handleSaveMeeting(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editTitle.trim()) {
+      setEditError('Meeting title cannot be blank.')
+      return
+    }
+    if (!editDate) {
+      setEditError('Meeting date is required.')
+      return
+    }
+
+    setSavingEdit(true)
+    setEditError(null)
+    setActionError(null)
+    setActionMessage(null)
+
+    try {
+      const updated = await updateMeeting(meetingId, {
+        title: editTitle.trim(),
+        meetingDate: editDate,
+        notes: editNotes.trim() || undefined,
+      })
+      setMeeting(updated)
+      setIsEditing(false)
+      setActionMessage('Meeting notes updated successfully. You can now run AI task or research extraction below.')
+    } catch (cause: unknown) {
+      setEditError(cause instanceof Error ? cause.message : 'Could not save meeting changes')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   const loadResearchReviews = useCallback(async (signal?: AbortSignal) => {
     if (!meetingIdIsValid) return
@@ -222,27 +276,120 @@ export function MeetingDetails() {
 
       {!meetingLoading && !meetingError && meeting ? (
         <article className="mt-6 rounded-lg border border-stone-200 bg-white p-5">
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs font-medium tracking-wide text-stone-500 uppercase">Date</dt>
-              <dd className="mt-1 text-sm text-stone-900">{meeting.meetingDate ?? 'No date'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium tracking-wide text-stone-500 uppercase">Project</dt>
-              <dd className="mt-1 text-sm text-stone-900">
-                {meeting.projectId != null ? `Project ${meeting.projectId}` : 'No project'}
-              </dd>
-            </div>
-          </dl>
-          <h2 className="mt-6 text-sm font-semibold text-stone-950">Notes</h2>
-          {meeting.notes != null && meeting.notes.trim().length > 0 ? (
-            <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-stone-700">
-              {meeting.notes}
-            </pre>
+          {!isEditing ? (
+            <>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3">
+                <dl className="grid grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-xs font-medium tracking-wide text-stone-500 uppercase">Date</dt>
+                    <dd className="mt-1 text-sm text-stone-900">{meeting.meetingDate ?? 'No date'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium tracking-wide text-stone-500 uppercase">Project</dt>
+                    <dd className="mt-1 text-sm text-stone-900">
+                      {meeting.projectId != null ? `Project ${meeting.projectId}` : 'No project'}
+                    </dd>
+                  </div>
+                </dl>
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="self-start rounded-md border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-800 transition-colors hover:bg-stone-50 sm:self-center"
+                >
+                  Edit Meeting / Notes
+                </button>
+              </div>
+              <h2 className="mt-4 text-sm font-semibold text-stone-950">Notes / Transcript</h2>
+              {meeting.notes != null && meeting.notes.trim().length > 0 ? (
+                <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-stone-700">
+                  {meeting.notes}
+                </pre>
+              ) : (
+                <p className="mt-2 text-sm text-stone-500">No notes for this meeting. Click "Edit Meeting / Notes" to add transcript or notes.</p>
+              )}
+            </>
           ) : (
-            <p className="mt-2 text-sm text-stone-500">No notes for this meeting.</p>
+            <form onSubmit={(e) => void handleSaveMeeting(e)}>
+              <div className="flex items-center justify-between border-b border-stone-200 pb-3">
+                <h2 className="text-sm font-semibold tracking-tight text-stone-950">Edit Meeting Details & Notes</h2>
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  className="text-xs text-stone-500 hover:text-stone-800"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {editError ? <div className="mt-3"><Alert message={editError} /></div> : null}
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="edit-title" className="block text-xs font-medium text-stone-700">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="edit-title"
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                    disabled={savingEdit}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="edit-date" className="block text-xs font-medium text-stone-700">
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="edit-date"
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                    disabled={savingEdit}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="edit-notes" className="block text-xs font-medium text-stone-700">
+                  Meeting Notes / Transcript
+                </label>
+                <textarea
+                  id="edit-notes"
+                  rows={10}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Enter meeting discussion, research decisions, experiments, and action items..."
+                  className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                  disabled={savingEdit}
+                />
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  className="rounded-md border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50"
+                  disabled={savingEdit}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="rounded-md bg-stone-950 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+                >
+                  {savingEdit ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           )}
         </article>
+
       ) : null}
 
       <div className="mt-8">

@@ -10,10 +10,6 @@ RUN npm ci
 # Copy frontend source files
 COPY . .
 
-# Set VITE_API_BASE_URL to empty string for relative /api proxying through Nginx
-ARG VITE_API_BASE_URL=""
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
 # Build production distribution
 RUN npm run build
 

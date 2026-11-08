@@ -35,10 +35,10 @@ services:
       - DB_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-researchtrace}
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - TASK_EXTRACTOR_MODE=${TASK_EXTRACTOR_MODE:-gemini}
-      - RESEARCH_EXTRACTOR_MODE=${RESEARCH_EXTRACTOR_MODE:-gemini}
+      - TASK_EXTRACTOR_MODE=${TASK_EXTRACTOR_MODE:-stub}
+      - RESEARCH_EXTRACTOR_MODE=${RESEARCH_EXTRACTOR_MODE:-stub}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_CHAT=${GEMINI_CHAT:-google-genai}
+      - GEMINI_CHAT=${GEMINI_CHAT:-none}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
@@ -55,8 +55,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        - VITE_API_BASE_URL=""
     image: researchtrace-frontend:${APP_VERSION:-latest}
     container_name: researchtrace-frontend
     restart: unless-stopped

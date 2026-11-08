@@ -19,6 +19,7 @@ import com.researchtrace.backend.service.ProjectService;
 import com.researchtrace.backend.service.ResearchQueryService;
 import com.researchtrace.backend.service.TaskService;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -92,6 +93,14 @@ public class ProjectController {
     @GetMapping("/{projectId}/meetings")
     public List<Meeting> getMeetingsByProject(@PathVariable Long projectId) {
         return meetingService.getMeetingsByProject(projectId);
+    }
+
+    @PostMapping("/{projectId}/meetings")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Meeting createMeetingForProject(
+            @PathVariable Long projectId,
+            @RequestBody Meeting meeting) {
+        return meetingService.createMeeting(projectId, meeting);
     }
 
     @GetMapping("/{projectId}/tasks")

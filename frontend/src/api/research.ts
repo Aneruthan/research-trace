@@ -1,5 +1,5 @@
-import { API_BASE_URL } from './config'
-import type { Meeting } from './types'
+import { API_BASE_URL, parseJsonResponse } from './config.ts'
+import type { Meeting } from './types.ts'
 
 export type ResearchReviewStatus = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED'
 export type ResearchDecisionStatus = 'ACTIVE' | 'SUPERSEDED'
@@ -223,7 +223,7 @@ export async function extractResearch(meetingId: number): Promise<MeetingExtract
   if (!response.ok) {
     throw new ApiError(await failureMessage(response, 'Could not extract research information'), response.status)
   }
-  return response.json() as Promise<MeetingExtraction>
+  return parseJsonResponse<MeetingExtraction>(response)
 }
 
 export async function submitResearchReview(
@@ -239,7 +239,7 @@ export async function submitResearchReview(
   if (!response.ok) {
     throw new ApiError(await failureMessage(response, 'Could not save the research review'), response.status)
   }
-  return response.json() as Promise<ExtractionReview>
+  return parseJsonResponse<ExtractionReview>(response)
 }
 
 export async function getProjectResearchDecisions(
@@ -275,7 +275,7 @@ async function getJson<T>(path: string, signal: AbortSignal | undefined, fallbac
   if (!response.ok) {
     throw new Error(`${fallback} (${response.status})`)
   }
-  return response.json() as Promise<T>
+  return parseJsonResponse<T>(response, fallback)
 }
 
 export async function getResearchReviews(

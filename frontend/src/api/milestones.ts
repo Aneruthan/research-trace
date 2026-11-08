@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config'
+import { API_BASE_URL, parseJsonResponse } from './config'
 import type { Milestone } from './types'
 
 export async function getProjectMilestones(
@@ -9,7 +9,7 @@ export async function getProjectMilestones(
   if (!response.ok) {
     throw new Error(`Could not load milestones for project ${projectId} (${response.status})`)
   }
-  return response.json() as Promise<Milestone[]>
+  return parseJsonResponse<Milestone[]>(response, `Could not load milestones for project ${projectId}`)
 }
 
 export async function getMilestoneProgress(milestoneId: number, signal?: AbortSignal): Promise<number> {

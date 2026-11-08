@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config'
+import { API_BASE_URL, parseJsonResponse } from './config'
 import type { Task, TaskStatus } from './types'
 
 export async function getProjectTasks(projectId: number, signal?: AbortSignal): Promise<Task[]> {
@@ -6,7 +6,7 @@ export async function getProjectTasks(projectId: number, signal?: AbortSignal): 
   if (!response.ok) {
     throw new Error(`Could not load tasks for project ${projectId} (${response.status})`)
   }
-  return response.json() as Promise<Task[]>
+  return parseJsonResponse<Task[]>(response, `Could not load tasks for project ${projectId}`)
 }
 
 export async function updateTaskStatus(task: Task, status: TaskStatus): Promise<Task> {
