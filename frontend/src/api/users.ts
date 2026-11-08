@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config'
+import { API_BASE_URL, parseJsonResponse } from './config'
 import type { User } from './types'
 
 export async function getUsers(signal?: AbortSignal): Promise<User[]> {
@@ -6,7 +6,7 @@ export async function getUsers(signal?: AbortSignal): Promise<User[]> {
   if (!response.ok) {
     throw new Error(`Could not load users (${response.status})`)
   }
-  return response.json() as Promise<User[]>
+  return parseJsonResponse<User[]>(response, 'Could not load users')
 }
 
 export function assigneeLabel(

@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: researchtrace-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-researchtrace}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Expose on host port 5433 to avoid collision with any local PostgreSQL instance on 5432
+      - "${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-researchtrace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - researchtrace-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: researchtrace-backend:${APP_VERSION:-latest}
+    container_name: researchtrace-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-researchtrace}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - TASK_EXTRACTOR_MODE=${TASK_EXTRACTOR_MODE:-stub}
+      - RESEARCH_EXTRACTOR_MODE=${RESEARCH_EXTRACTOR_MODE:-stub}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_CHAT=${GEMINI_CHAT:-none}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/projects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - researchtrace-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: researchtrace-frontend:${APP_VERSION:-latest}
+    container_name: researchtrace-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - researchtrace-net
+
+volumes:
+  postgres_data:
+    name: researchtrace_postgres_data
+
+networks:
+  researchtrace-net:
+    name: researchtrace-network
+    driver: bridge
