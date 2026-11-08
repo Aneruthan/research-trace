@@ -106,7 +106,7 @@ class ProjectDashboardServiceTest {
         when(taskService.getTasksByProject(PROJECT_ID)).thenReturn(List.of(task));
         when(taskSuggestionService.listByMeeting(21L)).thenReturn(List.of(accepted, pending));
         when(progressService.getProjectProgress(PROJECT_ID)).thenReturn(new BigDecimal("50.00"));
-        when(progressService.getMilestoneProgress(11L)).thenReturn(new BigDecimal("50.00"));
+        when(progressService.getMilestoneProgress(11L, PROJECT_ID)).thenReturn(new BigDecimal("50.00"));
         when(progressService.getStudentProgress(7L, PROJECT_ID)).thenReturn(new BigDecimal("100.00"));
 
         ProjectDashboard dashboard = dashboardService.getDashboard(PROJECT_ID);
@@ -123,7 +123,7 @@ class ProjectDashboardServiceTest {
         assertThat(dashboard.tasks()).containsExactly(task);
         assertThat(dashboard.pendingTaskSuggestions()).containsExactly(pending);
         assertThat(dashboard.researchMetrics()).isNull();
-        verify(progressService).getMilestoneProgress(11L);
+        verify(progressService).getMilestoneProgress(11L, PROJECT_ID);
         verify(progressService).getProjectProgress(PROJECT_ID);
     }
 

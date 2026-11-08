@@ -168,6 +168,16 @@ public class TaskSuggestionService {
         LocalDateTime now = LocalDateTime.now();
         task.setCreatedAt(now);
         task.setUpdatedAt(now);
+        // Guard against duplicate task creation if a task for this suggestion already exists
+        List<Task> existingForSuggestion = taskRepository.findByTaskSuggestionId(suggestionId);
+        if (!existingForSuggestion.isEmpty()) {
+            Task existingTask = existingForSuggestion.get(0);
+            suggestion.setStatus(TaskSuggestionStatus.ACCEPTED);
+            suggestion.setAcceptedTaskId(existingTask.getId());
+            taskSuggestionRepository.save(suggestion);
+            return existingTask;
+        }
+
         Task savedTask = taskRepository.save(task);
 
         suggestion.setStatus(TaskSuggestionStatus.ACCEPTED);
