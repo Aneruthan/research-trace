@@ -38,3 +38,4 @@ build/
 !.env.example
 
 startup-error.txt
+startup.log
