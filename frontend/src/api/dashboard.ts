@@ -5,7 +5,10 @@ export async function getProjectDashboard(
   projectId: number,
   signal?: AbortSignal,
 ): Promise<ProjectDashboard> {
-  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/dashboard`, { signal })
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/dashboard`, {
+    signal,
+    cache: 'no-store',
+  })
   if (!response.ok) {
     throw new Error(`Could not load project ${projectId} (${response.status})`)
   }

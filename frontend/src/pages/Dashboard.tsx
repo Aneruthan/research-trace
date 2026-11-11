@@ -15,32 +15,44 @@ export function Dashboard() {
 
   useEffect(() => {
     const controller = new AbortController()
+    let active = true
+
+    function load() {
+      Promise.all([
+        getProjectDashboard(SELECTED_PROJECT_ID, controller.signal),
+        getUsers(controller.signal).catch(() => [] as User[]),
+      ])
+        .then(([data, loadedUsers]) => {
+          if (active && !controller.signal.aborted) {
+            setDashboard(data)
+            setUsers(loadedUsers)
+            setError(null)
+          }
+        })
+        .catch((cause: unknown) => {
+          if (!active || controller.signal.aborted) {
+            return
+          }
+          setError(cause instanceof Error ? cause.message : 'Could not load the dashboard')
+        })
+        .finally(() => {
+          if (active && !controller.signal.aborted) {
+            setLoading(false)
+          }
+        })
+    }
+
     setLoading(true)
     setError(null)
-
-    Promise.all([
-      getProjectDashboard(SELECTED_PROJECT_ID, controller.signal),
-      getUsers(controller.signal).catch(() => [] as User[]),
-    ])
-      .then(([data, loadedUsers]) => {
-        if (!controller.signal.aborted) {
-          setDashboard(data)
-          setUsers(loadedUsers)
-        }
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) {
-          return
-        }
-        setError(cause instanceof Error ? cause.message : 'Could not load the dashboard')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
-      })
-
-    return () => controller.abort()
+    load()
+    window.addEventListener('researchtrace-progress-changed', load)
+    window.addEventListener('focus', load)
+    return () => {
+      active = false
+      controller.abort()
+      window.removeEventListener('researchtrace-progress-changed', load)
+      window.removeEventListener('focus', load)
+    }
   }, [])
 
   return (

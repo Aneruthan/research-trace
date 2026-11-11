@@ -91,6 +91,7 @@ export function Tasks() {
       )
       // Refresh authoritative backend progress and aggregates
       await load()
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not update task')
       // On failure, reload server state to ensure UI remains consistent with persisted database

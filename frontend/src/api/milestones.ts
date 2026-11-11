@@ -5,7 +5,10 @@ export async function getProjectMilestones(
   projectId: number,
   signal?: AbortSignal,
 ): Promise<Milestone[]> {
-  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/milestones`, { signal })
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/milestones`, {
+    signal,
+    cache: 'no-store',
+  })
   if (!response.ok) {
     throw new Error(`Could not load milestones for project ${projectId} (${response.status})`)
   }
@@ -20,9 +23,31 @@ export async function getMilestoneProgress(
   const url = projectId != null
     ? `${API_BASE_URL}/api/milestones/${milestoneId}/progress?projectId=${projectId}`
     : `${API_BASE_URL}/api/milestones/${milestoneId}/progress`
-  const response = await fetch(url, { signal })
+  const response = await fetch(url, { signal, cache: 'no-store' })
   if (!response.ok) {
     throw new Error(`Could not load milestone progress (${response.status})`)
   }
   return parseJsonResponse<number>(response, 'Could not load milestone progress')
+}
+
+export async function updateMilestone(milestone: Milestone): Promise<Milestone> {
+  if (milestone.id == null) {
+    throw new Error('Milestone has no id')
+  }
+  const response = await fetch(`${API_BASE_URL}/api/milestones/${milestone.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: milestone.projectId,
+      title: milestone.title,
+      description: milestone.description,
+      status: milestone.status,
+      dueDate: milestone.dueDate,
+      weight: milestone.weight,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`Could not update milestone ${milestone.id} (${response.status})`)
+  }
+  return parseJsonResponse<Milestone>(response, `Could not update milestone ${milestone.id}`)
 }

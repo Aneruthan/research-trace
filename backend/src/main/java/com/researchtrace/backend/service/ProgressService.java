@@ -1,5 +1,6 @@
 package com.researchtrace.backend.service;
 
+import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.repository.TaskRepository;
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,7 +48,24 @@ public class ProgressService {
         if (projectId == null) {
             return zeroProgress();
         }
-        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        List<Task> tasks = new ArrayList<>(taskRepository.findByProjectId(projectId));
+        List<Milestone> milestones = milestoneService.getMilestonesByProject(projectId);
+        if (milestones != null) {
+            for (Milestone milestone : milestones) {
+                if (milestone == null || milestone.getId() == null) {
+                    continue;
+                }
+                List<Task> milestoneTasks = taskRepository.findByMilestoneId(milestone.getId());
+                if (milestoneTasks == null) {
+                    continue;
+                }
+                for (Task task : milestoneTasks) {
+                    if (task != null && (task.getProjectId() == null || projectId.equals(task.getProjectId()))) {
+                        tasks.add(task);
+                    }
+                }
+            }
+        }
         return calculateTaskProgress(tasks);
     }
 

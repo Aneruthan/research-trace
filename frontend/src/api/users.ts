@@ -1,4 +1,4 @@
-import { API_BASE_URL, parseJsonResponse } from './config'
+import { API_BASE_URL, parseJsonResponse } from './config.ts'
 import type { User } from './types'
 
 export async function getUsers(signal?: AbortSignal): Promise<User[]> {
@@ -20,14 +20,8 @@ export function assigneeLabel(
     : users.find((user) => user.id === assigneeId)?.name?.trim() || null
   const name = matchedName ?? storedName
 
-  if (name != null && assigneeId != null) {
-    return `${name} (${assigneeId})`
-  }
   if (name != null) {
     return name
   }
-  if (assigneeId != null) {
-    return `Assignee ${assigneeId}`
-  }
-  return 'none'
+  return 'Unassigned'
 }

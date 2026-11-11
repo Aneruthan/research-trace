@@ -2,7 +2,10 @@ import { API_BASE_URL, parseJsonResponse } from './config.ts'
 import type { Task, TaskStatus } from './types.ts'
 
 export async function getProjectTasks(projectId: number, signal?: AbortSignal): Promise<Task[]> {
-  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks`, { signal })
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks`, {
+    signal,
+    cache: 'no-store',
+  })
   if (!response.ok) {
     throw new Error(`Could not load tasks for project ${projectId} (${response.status})`)
   }
@@ -33,7 +36,10 @@ export async function updateTaskStatus(task: Task, status: TaskStatus): Promise<
 }
 
 export async function getProjectProgress(projectId: number, signal?: AbortSignal): Promise<number> {
-  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/progress`, { signal })
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/progress`, {
+    signal,
+    cache: 'no-store',
+  })
   if (!response.ok) {
     throw new Error(`Could not load project progress (${response.status})`)
   }

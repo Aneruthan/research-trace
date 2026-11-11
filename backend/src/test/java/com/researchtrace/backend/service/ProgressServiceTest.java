@@ -1,5 +1,6 @@
 package com.researchtrace.backend.service;
 
+import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.repository.TaskRepository;
@@ -182,6 +183,20 @@ class ProgressServiceTest {
 
         when(taskRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of());
         assertThat(progressService.getProjectProgress(PROJECT_ID)).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    @DisplayName("Completing a milestone task with no project id updates project progress")
+    void projectProgressIncludesMilestoneTasksWithoutProjectId() {
+        Milestone milestone = new Milestone();
+        milestone.setId(MILESTONE_ID);
+        milestone.setProjectId(PROJECT_ID);
+        Task completed = createTask(5L, null, MILESTONE_ID, STUDENT_ID, TaskStatus.COMPLETED);
+        when(taskRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of());
+        when(milestoneService.getMilestonesByProject(PROJECT_ID)).thenReturn(List.of(milestone));
+        when(taskRepository.findByMilestoneId(MILESTONE_ID)).thenReturn(List.of(completed));
+
+        assertThat(progressService.getProjectProgress(PROJECT_ID)).isEqualByComparingTo("100.00");
     }
 
     @Test

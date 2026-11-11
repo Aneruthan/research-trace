@@ -56,8 +56,7 @@ public class MilestoneController {
         @PathVariable Long id,
         @RequestBody Milestone milestone) {
 
-        milestone.setId(id);
-        return milestoneService.saveMilestone(milestone);
+        return milestoneService.updateMilestone(id, milestone);
     }
 
     @DeleteMapping("/{id}")
