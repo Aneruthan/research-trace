@@ -10,12 +10,21 @@ import com.researchtrace.backend.dto.research.MeetingExtractionResponse;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Deterministic offline extractor for research notes when Gemini API is unavailable.
  * Provides predictable structured data for testing and demonstrations without network access.
+ * Supports explicit line-prefixed records (DECISION:, EXPERIMENT:, RESULT:, CHANGE:, ENTITY:)
+ * with graceful fallback to heuristic keyword extraction.
  */
 public class StubResearchNotesExtractor implements ResearchNotesExtractor {
+
+    private static final String PREFIX_DECISION = "DECISION:";
+    private static final String PREFIX_EXPERIMENT = "EXPERIMENT:";
+    private static final String PREFIX_RESULT = "RESULT:";
+    private static final String PREFIX_CHANGE = "CHANGE:";
+    private static final String PREFIX_ENTITY = "ENTITY:";
 
     @Override
     public MeetingExtractionResponse extract(String meetingNotes) {
@@ -31,11 +40,157 @@ public class StubResearchNotesExtractor implements ResearchNotesExtractor {
             return response;
         }
 
-        String lower = meetingNotes.toLowerCase();
+        // Check if notes contain any explicit prefix lines
+        if (hasExplicitPrefixes(meetingNotes)) {
+            return extractExplicit(meetingNotes);
+        }
+
+        return extractHeuristic(meetingNotes);
+    }
+
+    private boolean hasExplicitPrefixes(String notes) {
+        for (String rawLine : notes.split("\\R")) {
+            String line = rawLine.trim().toUpperCase(Locale.ROOT);
+            if (line.startsWith(PREFIX_DECISION) ||
+                line.startsWith(PREFIX_EXPERIMENT) ||
+                line.startsWith(PREFIX_RESULT) ||
+                line.startsWith(PREFIX_CHANGE) ||
+                line.startsWith(PREFIX_ENTITY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private MeetingExtractionResponse extractExplicit(String notes) {
+        MeetingExtractionResponse response = new MeetingExtractionResponse();
+        List<ExtractedDecision> decisions = new ArrayList<>();
+        List<ExtractedExperiment> experiments = new ArrayList<>();
+        List<ExtractedResult> results = new ArrayList<>();
+        List<ExtractedResearchEntity> entities = new ArrayList<>();
+        List<ExtractedResearchChange> changes = new ArrayList<>();
+        List<ExtractedTask> tasks = new ArrayList<>();
+
+        for (String rawLine : notes.split("\\R")) {
+            String line = rawLine.trim();
+            String upper = line.toUpperCase(Locale.ROOT);
+
+            if (upper.startsWith(PREFIX_DECISION)) {
+                String body = line.substring(PREFIX_DECISION.length()).trim();
+                String[] segments = splitSegments(body);
+                if (segments.length > 0 && !segments[0].isBlank()) {
+                    ExtractedDecision d = new ExtractedDecision();
+                    d.setTitle(segments[0]);
+                    d.setReason(segments.length > 1 ? segments[1] : "Supervisor consensus during meeting review.");
+                    d.setDescription(segments.length > 2 ? segments[2] : segments[0]);
+                    d.setMadeBy("Research Supervisor");
+                    d.setConfidence(0.95);
+                    decisions.add(d);
+                }
+            } else if (upper.startsWith(PREFIX_EXPERIMENT)) {
+                String body = line.substring(PREFIX_EXPERIMENT.length()).trim();
+                String[] segments = splitSegments(body);
+                if (segments.length > 0 && !segments[0].isBlank()) {
+                    ExtractedExperiment exp = new ExtractedExperiment();
+                    exp.setTitle(segments[0]);
+                    exp.setObjective(segments.length > 1 ? segments[1] : "Evaluate " + segments[0]);
+                    exp.setVariables(segments.length > 2 ? segments[2] : "Experimental configuration and baseline comparison");
+                    exp.setExpectedOutcome(segments.length > 3 ? segments[3] : "Statistically significant improvement over baseline");
+                    exp.setDescription(segments.length > 1 ? segments[1] : segments[0]);
+                    exp.setConfidence(0.95);
+                    experiments.add(exp);
+                }
+            } else if (upper.startsWith(PREFIX_RESULT)) {
+                String body = line.substring(PREFIX_RESULT.length()).trim();
+                String[] segments = splitSegments(body);
+                if (segments.length > 0 && !segments[0].isBlank()) {
+                    ExtractedResult res = new ExtractedResult();
+                    if (segments.length >= 3) {
+                        res.setExperiment(segments[0]);
+                        res.setMetrics(segments[1]);
+                        res.setDescription(segments[2]);
+                        res.setComparison(segments.length >= 4 ? segments[3] : "Consistent with empirical hypotheses");
+                    } else if (segments.length == 2) {
+                        // If segment 0 matches an experiment title, use it as experiment
+                        String firstExp = !experiments.isEmpty() ? experiments.get(0).getTitle() : "Primary Experiment";
+                        res.setExperiment(firstExp);
+                        res.setMetrics(segments[0]);
+                        res.setDescription(segments[1]);
+                        res.setComparison("Consistent with empirical hypotheses");
+                    } else {
+                        String firstExp = !experiments.isEmpty() ? experiments.get(0).getTitle() : "Primary Experiment";
+                        res.setExperiment(firstExp);
+                        res.setMetrics(segments[0]);
+                        res.setDescription(segments[0]);
+                        res.setComparison("Consistent with empirical hypotheses");
+                    }
+                    res.setConfidence(0.95);
+                    results.add(res);
+                }
+            } else if (upper.startsWith(PREFIX_CHANGE)) {
+                String body = line.substring(PREFIX_CHANGE.length()).trim();
+                String[] segments = splitSegments(body);
+                if (segments.length > 0 && !segments[0].isBlank()) {
+                    ExtractedResearchChange ch = new ExtractedResearchChange();
+                    ch.setPreviousApproach(segments[0]);
+                    ch.setNewApproach(segments.length > 1 ? segments[1] : "Updated methodology");
+                    ch.setReason(segments.length > 2 ? segments[2] : "Methodological improvement identified in supervision.");
+                    ch.setDescription(segments.length > 3 ? segments[3] : ("Change from " + segments[0] + " to " + (segments.length > 1 ? segments[1] : "updated approach")));
+                    ch.setConfidence(0.95);
+                    changes.add(ch);
+                }
+            } else if (upper.startsWith(PREFIX_ENTITY)) {
+                String body = line.substring(PREFIX_ENTITY.length()).trim();
+                String[] segments = splitSegments(body);
+                if (segments.length > 0 && !segments[0].isBlank()) {
+                    ExtractedResearchEntity entity = new ExtractedResearchEntity();
+                    entity.setName(segments[0]);
+                    entity.setType(segments.length > 1 ? segments[1].toUpperCase(Locale.ROOT) : "CONCEPT");
+                    entity.setDescription(segments.length > 2 ? segments[2] : segments[0]);
+                    entity.setConfidence(0.95);
+                    entities.add(entity);
+                }
+            }
+        }
+
+        // If no explicit entities found, auto-detect entities from mentions
+        if (entities.isEmpty()) {
+            String lower = notes.toLowerCase(Locale.ROOT);
+            if (lower.contains("tcga-brca") || lower.contains("dataset") || lower.contains("benchmark")) {
+                ExtractedResearchEntity entity = new ExtractedResearchEntity();
+                entity.setName("TCGA-BRCA");
+                entity.setType("DATASET");
+                entity.setDescription("TCGA Breast Invasive Carcinoma whole-slide pathology dataset");
+                entity.setConfidence(0.95);
+                entities.add(entity);
+            }
+            if (lower.contains("vit-b16") || lower.contains("vision transformer") || lower.contains("model")) {
+                ExtractedResearchEntity entity = new ExtractedResearchEntity();
+                entity.setName("ViT-B16");
+                entity.setType("MODEL");
+                entity.setDescription("Vision Transformer architecture for pathology patch classification");
+                entity.setConfidence(0.95);
+                entities.add(entity);
+            }
+        }
+
+        response.setDecisions(decisions);
+        response.setExperiments(experiments);
+        response.setResults(results);
+        response.setResearchEntities(entities);
+        response.setResearchChanges(changes);
+        response.setDeadlines(new ArrayList<>());
+        response.setTasks(tasks);
+
+        return response;
+    }
+
+    private MeetingExtractionResponse extractHeuristic(String meetingNotes) {
+        MeetingExtractionResponse response = new MeetingExtractionResponse();
+        String lower = meetingNotes.toLowerCase(Locale.ROOT);
 
         List<ExtractedDecision> decisions = new ArrayList<>();
         List<ExtractedExperiment> experiments = new ArrayList<>();
-        List<ResultHolder> resultHolders = new ArrayList<>();
         List<ExtractedResult> results = new ArrayList<>();
         List<ExtractedResearchEntity> entities = new ArrayList<>();
         List<ExtractedResearchChange> changes = new ArrayList<>();
@@ -166,5 +321,12 @@ public class StubResearchNotesExtractor implements ResearchNotesExtractor {
         return response;
     }
 
-    private static class ResultHolder {}
+    private String[] splitSegments(String body) {
+        String[] parts = body.split("\\|", -1);
+        String[] trimmed = new String[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            trimmed[i] = parts[i].trim();
+        }
+        return trimmed;
+    }
 }

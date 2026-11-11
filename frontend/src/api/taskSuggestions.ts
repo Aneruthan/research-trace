@@ -1,5 +1,5 @@
-import { API_BASE_URL } from './config'
-import type { SuggestionUpdate, TaskSuggestion } from './types'
+import { API_BASE_URL, parseJsonResponse } from './config.ts'
+import type { SuggestionUpdate, TaskSuggestion } from './types.ts'
 
 export async function getTaskSuggestions(
   meetingId: number,
@@ -11,7 +11,7 @@ export async function getTaskSuggestions(
   if (!response.ok) {
     throw new Error(`Could not load task suggestions (${response.status})`)
   }
-  return response.json() as Promise<TaskSuggestion[]>
+  return parseJsonResponse<TaskSuggestion[]>(response)
 }
 
 export async function extractTaskSuggestions(meetingId: number): Promise<TaskSuggestion[]> {
@@ -21,7 +21,7 @@ export async function extractTaskSuggestions(meetingId: number): Promise<TaskSug
   if (!response.ok) {
     throw new Error(`Could not extract tasks (${response.status})`)
   }
-  return response.json() as Promise<TaskSuggestion[]>
+  return parseJsonResponse<TaskSuggestion[]>(response)
 }
 
 export async function updateTaskSuggestion(
@@ -36,7 +36,7 @@ export async function updateTaskSuggestion(
   if (!response.ok) {
     throw new Error(`Could not update suggestion (${response.status})`)
   }
-  return response.json() as Promise<TaskSuggestion>
+  return parseJsonResponse<TaskSuggestion>(response)
 }
 
 export async function acceptTaskSuggestion(suggestionId: number): Promise<void> {

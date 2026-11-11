@@ -1,6 +1,7 @@
 package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.model.Milestone;
+import com.researchtrace.backend.model.MilestoneStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.model.Task;
@@ -16,11 +17,16 @@ import com.researchtrace.backend.repository.TaskRepository;
 import com.researchtrace.backend.repository.TaskSuggestionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +43,7 @@ public class TaskService {
     private final ResearchDecisionRepository researchDecisionRepository;
     private final ExperimentRepository experimentRepository;
     private final ResearchEventRepository researchEventRepository;
+    private final ProgressService progressService;
 
     @Autowired
     public TaskService(
@@ -46,7 +53,8 @@ public class TaskService {
             TaskHistoryRepository taskHistoryRepository,
             ResearchDecisionRepository researchDecisionRepository,
             ExperimentRepository experimentRepository,
-            ResearchEventRepository researchEventRepository) {
+            ResearchEventRepository researchEventRepository,
+            @Nullable ProgressService progressService) {
         this.taskRepository = taskRepository;
         this.milestoneService = milestoneService;
         this.taskSuggestionRepository = taskSuggestionRepository;
@@ -54,6 +62,19 @@ public class TaskService {
         this.researchDecisionRepository = researchDecisionRepository;
         this.experimentRepository = experimentRepository;
         this.researchEventRepository = researchEventRepository;
+        this.progressService = progressService;
+    }
+
+    public TaskService(
+            TaskRepository taskRepository,
+            MilestoneService milestoneService,
+            TaskSuggestionRepository taskSuggestionRepository,
+            TaskHistoryRepository taskHistoryRepository,
+            ResearchDecisionRepository researchDecisionRepository,
+            ExperimentRepository experimentRepository,
+            ResearchEventRepository researchEventRepository) {
+        this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
+             researchDecisionRepository, experimentRepository, researchEventRepository, null);
     }
 
     public TaskService(
@@ -63,7 +84,8 @@ public class TaskService {
             TaskHistoryRepository taskHistoryRepository,
             ResearchDecisionRepository researchDecisionRepository,
             ExperimentRepository experimentRepository) {
-        this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository, researchDecisionRepository, experimentRepository, null);
+        this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
+             researchDecisionRepository, experimentRepository, null, null);
     }
 
     public TaskService(
@@ -71,14 +93,15 @@ public class TaskService {
             MilestoneService milestoneService,
             TaskSuggestionRepository taskSuggestionRepository,
             TaskHistoryRepository taskHistoryRepository) {
-        this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository, null, null, null);
+        this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
+             null, null, null, null);
     }
 
     public TaskService(
             TaskRepository taskRepository,
             MilestoneService milestoneService,
             TaskSuggestionRepository taskSuggestionRepository) {
-        this(taskRepository, milestoneService, taskSuggestionRepository, null, null, null, null);
+        this(taskRepository, milestoneService, taskSuggestionRepository, null, null, null, null, null);
     }
 
     public List<Task> getAllTasks() {
@@ -90,11 +113,11 @@ public class TaskService {
     }
 
     public List<Task> getTasksByMilestone(Long milestoneId) {
-        return taskRepository.findByMilestoneId(milestoneId);
+        return taskRepository.findByMilestoneIdOrderByIdAsc(milestoneId);
     }
 
     public List<Task> getTasksByAssignee(Long assigneeId) {
-        return taskRepository.findByAssigneeId(assigneeId);
+        return taskRepository.findByAssigneeIdOrderByIdAsc(assigneeId);
     }
 
     public List<Task> getTasksByResearchDecision(Long researchDecisionId) {
@@ -108,41 +131,54 @@ public class TaskService {
     public List<Task> getTasksByProject(Long projectId) {
         Map<Long, Task> tasks = new LinkedHashMap<>();
 
-        List<Task> directTasks = taskRepository.findByProjectId(projectId);
-        for (Task task : directTasks) {
-            if (task.getId() != null) {
-                tasks.put(task.getId(), task);
-            }
+        List<Task> directTasks = taskRepository.findByProjectIdOrderByIdAsc(projectId);
+        if (directTasks == null || directTasks.isEmpty()) {
+            directTasks = taskRepository.findByProjectId(projectId);
         }
-
-        List<Long> milestoneIds = milestoneService.getMilestonesByProject(projectId).stream()
-            .map(Milestone::getId)
-            .filter(Objects::nonNull)
-            .toList();
-        if (!milestoneIds.isEmpty()) {
-            for (Task task : taskRepository.findByMilestoneIdIn(milestoneIds)) {
-                if (task.getId() != null && !tasks.containsKey(task.getId())) {
+        if (directTasks != null) {
+            for (Task task : directTasks) {
+                if (task.getId() != null) {
                     tasks.put(task.getId(), task);
                 }
             }
         }
 
-        List<Long> acceptedTaskIds = taskSuggestionRepository
-            .findByProjectIdAndStatus(projectId, TaskSuggestionStatus.ACCEPTED).stream()
-            .map(TaskSuggestion::getAcceptedTaskId)
-            .filter(Objects::nonNull)
-            .filter(id -> !tasks.containsKey(id))
-            .distinct()
-            .toList();
-        if (!acceptedTaskIds.isEmpty()) {
-            taskRepository.findAllById(acceptedTaskIds)
-                .forEach(task -> {
+        if (milestoneService != null) {
+            List<Long> milestoneIds = milestoneService.getMilestonesByProject(projectId).stream()
+                .map(Milestone::getId)
+                .filter(Objects::nonNull)
+                .toList();
+            if (!milestoneIds.isEmpty()) {
+                for (Task task : taskRepository.findByMilestoneIdIn(milestoneIds)) {
                     if (task.getId() != null && !tasks.containsKey(task.getId())) {
                         tasks.put(task.getId(), task);
                     }
-                });
+                }
+            }
         }
-        return List.copyOf(tasks.values());
+
+        if (taskSuggestionRepository != null) {
+            List<Long> acceptedTaskIds = taskSuggestionRepository
+                .findByProjectIdAndStatus(projectId, TaskSuggestionStatus.ACCEPTED).stream()
+                .map(TaskSuggestion::getAcceptedTaskId)
+                .filter(Objects::nonNull)
+                .filter(id -> !tasks.containsKey(id))
+                .distinct()
+                .toList();
+            if (!acceptedTaskIds.isEmpty()) {
+                taskRepository.findAllById(acceptedTaskIds)
+                    .forEach(task -> {
+                        if (task.getId() != null && !tasks.containsKey(task.getId())) {
+                            tasks.put(task.getId(), task);
+                        }
+                    });
+            }
+        }
+
+        // Return deterministically sorted list by ID ASC so UI ordering is permanent and stable
+        return tasks.values().stream()
+            .sorted(Comparator.comparing(Task::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+            .toList();
     }
 
     @Transactional
@@ -154,6 +190,7 @@ public class TaskService {
     public Task saveTask(Task task, Long userId) {
         LocalDateTime now = LocalDateTime.now();
         TaskStatus previousStatus = null;
+        Long previousMilestoneId = null;
         boolean isStatusChanged = false;
 
         if (task.getId() == null) {
@@ -168,6 +205,8 @@ public class TaskService {
             if (existingOpt.isPresent()) {
                 Task existing = existingOpt.get();
                 previousStatus = existing.getStatus();
+                previousMilestoneId = existing.getMilestoneId();
+
                 if (task.getStatus() != null && task.getStatus() != previousStatus) {
                     isStatusChanged = true;
                 }
@@ -248,7 +287,66 @@ public class TaskService {
             }
         }
 
+        // Synchronize affected milestone statuses
+        syncMilestoneStatus(saved.getMilestoneId());
+        if (previousMilestoneId != null && !previousMilestoneId.equals(saved.getMilestoneId())) {
+            syncMilestoneStatus(previousMilestoneId);
+        }
+
         return saved;
+    }
+
+    public void syncMilestoneStatus(Long milestoneId) {
+        if (milestoneId == null || milestoneService == null) {
+            return;
+        }
+        Optional<Milestone> opt = milestoneService.getMilestoneById(milestoneId);
+        if (opt.isEmpty()) {
+            return;
+        }
+        Milestone milestone = opt.get();
+        List<Task> tasks = taskRepository.findByMilestoneId(milestoneId);
+        if (tasks.isEmpty()) {
+            // No associated tasks: preserve existing manual status
+            return;
+        }
+
+        BigDecimal progress = progressService != null
+            ? progressService.calculateTaskProgress(tasks)
+            : calculateTaskProgressFallback(tasks);
+
+        if (progress.compareTo(BigDecimal.ZERO) == 0) {
+            milestone.setStatus(MilestoneStatus.NOT_STARTED);
+        } else if (progress.compareTo(new BigDecimal("100")) >= 0) {
+            milestone.setStatus(MilestoneStatus.COMPLETED);
+        } else {
+            milestone.setStatus(MilestoneStatus.IN_PROGRESS);
+        }
+        milestoneService.saveMilestone(milestone);
+    }
+
+    private BigDecimal calculateTaskProgressFallback(Collection<Task> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        Map<Long, Task> unique = new LinkedHashMap<>();
+        for (Task t : tasks) {
+            if (t != null && t.getId() != null) {
+                unique.put(t.getId(), t);
+            }
+        }
+        if (unique.isEmpty()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal pts = BigDecimal.ZERO;
+        for (Task t : unique.values()) {
+            if (t.getStatus() == TaskStatus.COMPLETED) {
+                pts = pts.add(new BigDecimal("100"));
+            } else if (t.getStatus() == TaskStatus.IN_PROGRESS) {
+                pts = pts.add(new BigDecimal("50"));
+            }
+        }
+        return pts.divide(BigDecimal.valueOf(unique.size()), 2, RoundingMode.HALF_UP);
     }
 
     private void validateMilestone(Task task) {
@@ -297,7 +395,16 @@ public class TaskService {
         return taskHistoryRepository.findByTaskIdOrderByChangedAtAscIdAsc(taskId);
     }
 
+    @Transactional
     public void deleteTask(Long id) {
-        taskRepository.deleteById(id);
+        if (id == null) {
+            return;
+        }
+        Optional<Task> opt = taskRepository.findById(id);
+        if (opt.isPresent()) {
+            Long milestoneId = opt.get().getMilestoneId();
+            taskRepository.deleteById(id);
+            syncMilestoneStatus(milestoneId);
+        }
     }
 }

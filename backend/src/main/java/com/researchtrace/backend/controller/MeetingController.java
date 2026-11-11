@@ -2,7 +2,9 @@ package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.service.MeetingService;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -24,10 +26,11 @@ public class MeetingController {
     @GetMapping("/{id}")
     public Meeting getMeetingById(@PathVariable Long id) {
         return meetingService.getMeetingById(id)
-            .orElseThrow(() -> new RuntimeException("Meeting not found"));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + id));
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     public Meeting createMeeting(@RequestBody Meeting meeting) {
         return meetingService.saveMeeting(meeting);
     }
@@ -37,11 +40,11 @@ public class MeetingController {
         @PathVariable Long id,
         @RequestBody Meeting meeting) {
 
-        meeting.setId(id);
-        return meetingService.saveMeeting(meeting);
+        return meetingService.updateMeeting(id, meeting);
     }
     
     @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteMeeting(@PathVariable Long id) {
         meetingService.deleteMeeting(id);
     }

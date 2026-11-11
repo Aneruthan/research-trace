@@ -34,6 +34,24 @@ Prof. Pulkit Verma, IIT Madras.
 
 Contact email and phone are not recorded in this repository. Use the contact channel given by the course staff. Do not put passwords or API keys in this file.
 
+## Docker Quickstart
+
+For automated multi-container deployment without installing JDK 17, Node.js, or PostgreSQL locally:
+
+```bash
+# 1. Copy environment template
+cp .env.example .env
+
+# 2. Build and launch database, backend, and frontend
+docker compose up -d --build
+
+# 3. Open application in browser
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8080/api/projects/1/dashboard
+```
+
+For complete container networking, health checks, persistence verification, and image packaging details, see [docs/docker-deployment.md](docs/docker-deployment.md).
+
 ## Prerequisites
 
 - JDK 17

@@ -1,22 +1,36 @@
 package com.researchtrace.backend.service;
 
-import com.researchtrace.backend.model.Milestone;
+import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.repository.TaskRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * Authoritative progress calculation service.
+ * Applies a single, consistent task-based contribution policy:
+ * - COMPLETED   = 100% contribution
+ * - IN_PROGRESS = 50% contribution
+ * - TODO / other = 0% contribution
+ * - No associated tasks = 0.00%
+ *
+ * Progress = sum(task contributions) / number of unique associated tasks.
+ * All calculations are strictly bounded between 0.00% and 100.00%.
+ */
 @Service
 public class ProgressService {
 
-    private static final int PROGRESS_SCALE = 2;
-    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
+    public static final int PROGRESS_SCALE = 2;
+    public static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
+    public static final BigDecimal FIFTY = new BigDecimal("50");
 
     private final MilestoneService milestoneService;
-
     private final TaskRepository taskRepository;
 
     public ProgressService(MilestoneService milestoneService, TaskRepository taskRepository) {
@@ -24,131 +38,114 @@ public class ProgressService {
         this.taskRepository = taskRepository;
     }
 
+    /**
+     * Calculates project progress across all active project tasks.
+     * Uses the unified 100/50/0 contribution policy.
+     */
     public BigDecimal getProjectProgress(Long projectId) {
-        List<Milestone> milestones = milestoneService.getMilestonesByProject(projectId);
-
-        BigDecimal weightedProgress = BigDecimal.ZERO;
-        BigDecimal totalWeight = BigDecimal.ZERO;
-        long milestoneTasks = 0;
-
-        for (Milestone milestone : milestones) {
-            BigDecimal weight = valueOrZero(milestone.getWeight());
-            if (weight.signum() <= 0) {
-                continue;
-            }
-
-            MilestoneProgressResult result = calculateMilestoneProgress(milestone.getId(), projectId);
-
-            weightedProgress = weightedProgress.add(weight.multiply(result.progress()));
-            totalWeight = totalWeight.add(weight);
-            milestoneTasks += result.totalTasks();
+        if (projectId == null) {
+            return zeroProgress();
         }
-
-        long unassignedTotal = taskRepository.countByProjectIdAndMilestoneIdIsNull(projectId);
-        long unassignedCompleted = taskRepository.countByProjectIdAndMilestoneIdIsNullAndStatus(
-            projectId,
-            TaskStatus.COMPLETED);
-
-        if (totalWeight.signum() == 0) {
-            if (unassignedTotal == 0) {
-                return zeroProgress();
-            }
-            return percentage(unassignedCompleted, unassignedTotal);
-        }
-
-        if (unassignedTotal == 0) {
-            return weightedProgress.divide(totalWeight, PROGRESS_SCALE, RoundingMode.HALF_UP);
-        }
-
-        BigDecimal unassignedWeight = milestoneTasks > 0
-            ? totalWeight.multiply(BigDecimal.valueOf(unassignedTotal))
-                .divide(BigDecimal.valueOf(milestoneTasks), 4, RoundingMode.HALF_UP)
-            : totalWeight;
-        BigDecimal unassignedProgress = percentage(unassignedCompleted, unassignedTotal);
-        BigDecimal combinedWeight = totalWeight.add(unassignedWeight);
-        BigDecimal combinedProgress = weightedProgress.add(unassignedWeight.multiply(unassignedProgress));
-
-        return combinedProgress.divide(combinedWeight, PROGRESS_SCALE, RoundingMode.HALF_UP);
+        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        return calculateTaskProgress(tasks);
     }
 
     public BigDecimal getMilestoneProgress(Long milestoneId) {
         return getMilestoneProgress(milestoneId, null);
     }
 
+    /**
+     * Calculates milestone progress scoped to tasks within the milestone (and optional project).
+     */
     public BigDecimal getMilestoneProgress(Long milestoneId, Long projectId) {
-        return calculateMilestoneProgress(milestoneId, projectId).progress();
-    }
-
-    private MilestoneProgressResult calculateMilestoneProgress(Long milestoneId, Long projectId) {
-        long totalTasks;
-        long completedTasks;
-
-        if (projectId != null) {
-            totalTasks = taskRepository.countByMilestoneIdAndProjectId(milestoneId, projectId);
-            if (totalTasks == 0) {
-                return new MilestoneProgressResult(zeroProgress(), 0);
-            }
-            completedTasks = taskRepository.countByMilestoneIdAndProjectIdAndStatus(
-                milestoneId,
-                projectId,
-                TaskStatus.COMPLETED);
-        } else {
-            totalTasks = taskRepository.countByMilestoneId(milestoneId);
-            if (totalTasks == 0) {
-                return new MilestoneProgressResult(zeroProgress(), 0);
-            }
-            completedTasks = taskRepository.countByMilestoneIdAndStatus(
-                milestoneId,
-                TaskStatus.COMPLETED);
+        if (milestoneId == null) {
+            return zeroProgress();
         }
-
-        return new MilestoneProgressResult(percentage(completedTasks, totalTasks), totalTasks);
+        List<Task> tasks;
+        if (projectId != null) {
+            tasks = taskRepository.findByMilestoneIdAndProjectId(milestoneId, projectId);
+        } else {
+            tasks = taskRepository.findByMilestoneId(milestoneId);
+        }
+        return calculateTaskProgress(tasks);
     }
 
     public BigDecimal getStudentProgress(Long studentId) {
         return getStudentProgress(studentId, null);
     }
 
+    /**
+     * Calculates student progress scoped to tasks assigned to the student (and optional project).
+     */
     public BigDecimal getStudentProgress(Long studentId, Long projectId) {
-        long totalTasks;
-        long completedTasks;
-
+        if (studentId == null) {
+            return zeroProgress();
+        }
+        List<Task> tasks;
         if (projectId != null) {
-            totalTasks = taskRepository.countByAssigneeIdAndProjectId(studentId, projectId);
-            if (totalTasks == 0) {
-                return zeroProgress();
-            }
-            completedTasks = taskRepository.countByAssigneeIdAndProjectIdAndStatus(
-                studentId,
-                projectId,
-                TaskStatus.COMPLETED);
+            tasks = taskRepository.findByAssigneeIdAndProjectId(studentId, projectId);
         } else {
-            totalTasks = taskRepository.countByAssigneeId(studentId);
-            if (totalTasks == 0) {
-                return zeroProgress();
-            }
-            completedTasks = taskRepository.countByAssigneeIdAndStatus(
-                studentId,
-                TaskStatus.COMPLETED);
+            tasks = taskRepository.findByAssigneeId(studentId);
+        }
+        return calculateTaskProgress(tasks);
+    }
+
+    /**
+     * Unified task progress algorithm:
+     * - Deduplicates tasks by ID
+     * - COMPLETED = 100
+     * - IN_PROGRESS = 50
+     * - TODO / NOT_STARTED = 0
+     * - Progress = sum(contributions) / count
+     * - Bounded between 0.00 and 100.00
+     */
+    public BigDecimal calculateTaskProgress(Collection<Task> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return zeroProgress();
         }
 
-        return percentage(completedTasks, totalTasks);
+        Map<Long, Task> uniqueTasks = new LinkedHashMap<>();
+        long syntheticId = -1L;
+        for (Task task : tasks) {
+            if (task == null) {
+                continue;
+            }
+            if (task.getId() != null) {
+                uniqueTasks.put(task.getId(), task);
+            } else {
+                uniqueTasks.put(syntheticId--, task);
+            }
+        }
+
+        if (uniqueTasks.isEmpty()) {
+            return zeroProgress();
+        }
+
+        BigDecimal totalPoints = BigDecimal.ZERO;
+        for (Task task : uniqueTasks.values()) {
+            if (task.getStatus() == TaskStatus.COMPLETED) {
+                totalPoints = totalPoints.add(ONE_HUNDRED);
+            } else if (task.getStatus() == TaskStatus.IN_PROGRESS) {
+                totalPoints = totalPoints.add(FIFTY);
+            }
+        }
+
+        BigDecimal progress = totalPoints.divide(
+            BigDecimal.valueOf(uniqueTasks.size()),
+            PROGRESS_SCALE,
+            RoundingMode.HALF_UP
+        );
+
+        if (progress.compareTo(BigDecimal.ZERO) < 0) {
+            return zeroProgress();
+        }
+        if (progress.compareTo(ONE_HUNDRED) > 0) {
+            return ONE_HUNDRED.setScale(PROGRESS_SCALE, RoundingMode.HALF_UP);
+        }
+        return progress;
     }
 
-    private BigDecimal percentage(long completedTasks, long totalTasks) {
-        return BigDecimal.valueOf(completedTasks)
-            .multiply(ONE_HUNDRED)
-            .divide(BigDecimal.valueOf(totalTasks), PROGRESS_SCALE, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal valueOrZero(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
-    }
-
-    private BigDecimal zeroProgress() {
+    public BigDecimal zeroProgress() {
         return BigDecimal.ZERO.setScale(PROGRESS_SCALE, RoundingMode.HALF_UP);
-    }
-
-    private record MilestoneProgressResult(BigDecimal progress, long totalTasks) {
     }
 }

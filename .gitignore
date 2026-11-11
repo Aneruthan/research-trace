@@ -1,0 +1,11 @@
+# Environment variables
+.env
+.env.local
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Database backups
+*.sql
+!docker/initdb/*.sql

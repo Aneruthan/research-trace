@@ -12,6 +12,8 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     List<Task> findByProjectId(Long projectId);
 
+    List<Task> findByProjectIdOrderByIdAsc(Long projectId);
+
     List<Task> findByProjectIdOrderByCreatedAtDesc(Long projectId);
 
     List<Task> findByMeetingId(Long meetingId);
@@ -28,9 +30,27 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     List<Task> findByMilestoneId(Long milestoneId);
 
+    List<Task> findByMilestoneIdOrderByIdAsc(Long milestoneId);
+
     List<Task> findByMilestoneIdIn(List<Long> milestoneIds);
 
     List<Task> findByAssigneeId(Long assigneeId);
+
+    List<Task> findByAssigneeIdOrderByIdAsc(Long assigneeId);
+
+    @Query("SELECT t FROM Task t WHERE t.milestoneId = :milestoneId AND (t.projectId = :projectId OR t.projectId IS NULL) ORDER BY t.id ASC")
+    List<Task> findByMilestoneIdAndProjectIdOrderByIdAsc(@Param("milestoneId") Long milestoneId, @Param("projectId") Long projectId);
+
+    default List<Task> findByMilestoneIdAndProjectId(Long milestoneId, Long projectId) {
+        return findByMilestoneIdAndProjectIdOrderByIdAsc(milestoneId, projectId);
+    }
+
+    @Query("SELECT t FROM Task t WHERE t.assigneeId = :assigneeId AND (t.projectId = :projectId OR t.projectId IS NULL) ORDER BY t.id ASC")
+    List<Task> findByAssigneeIdAndProjectIdOrderByIdAsc(@Param("assigneeId") Long assigneeId, @Param("projectId") Long projectId);
+
+    default List<Task> findByAssigneeIdAndProjectId(Long assigneeId, Long projectId) {
+        return findByAssigneeIdAndProjectIdOrderByIdAsc(assigneeId, projectId);
+    }
 
     long countByMilestoneId(Long milestoneId);
 
