@@ -39,6 +39,13 @@ export async function createProjectTask(
   return parseJsonResponse<Task>(response, 'Could not create task')
 }
 
+export async function deleteProjectTask(projectId: number, taskId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}`, { method: 'DELETE' })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, `Could not delete task ${taskId}`))
+  }
+}
+
 export async function updateProjectTask(task: Task): Promise<Task> {
   if (task.id == null || task.projectId == null) {
     throw new Error('Task is missing its project')

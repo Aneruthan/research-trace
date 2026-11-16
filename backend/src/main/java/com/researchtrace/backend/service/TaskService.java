@@ -557,10 +557,21 @@ public class TaskService {
             return;
         }
         Optional<Task> opt = taskRepository.findById(id);
-        if (opt.isPresent()) {
-            Long milestoneId = opt.get().getMilestoneId();
-            taskRepository.deleteById(id);
-            syncMilestoneStatus(milestoneId);
+        if (opt.isEmpty()) {
+            return;
         }
+        Task task = opt.get();
+        if (taskHistoryRepository != null) {
+            taskHistoryRepository.deleteByTaskId(task.getId());
+        }
+        if (taskSuggestionRepository != null) {
+            for (TaskSuggestion suggestion : taskSuggestionRepository.findByAcceptedTaskId(task.getId())) {
+                suggestion.setAcceptedTaskId(null);
+                taskSuggestionRepository.save(suggestion);
+            }
+        }
+        Long milestoneId = task.getMilestoneId();
+        taskRepository.deleteById(id);
+        syncMilestoneStatus(milestoneId);
     }
 }

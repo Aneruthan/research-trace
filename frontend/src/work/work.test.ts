@@ -4,6 +4,7 @@ import type { Task } from '../api/types.ts'
 import {
   filterTasks,
   isOverdueTask,
+  studentFilterOptions,
   studentTaskDraft,
   studentTaskEmptyMessage,
   taskCounts,
@@ -77,6 +78,29 @@ test('a student task is created for that student and rejected outside the projec
   )
   assert.equal(studentTaskEmptyMessage(0), 'No tasks assigned yet.')
   assert.equal(studentTaskEmptyMessage(2), null)
+})
+
+test('the student filter includes project members and assignees from this project only', () => {
+  const options = studentFilterOptions(
+    [
+      { userId: 7, role: 'STUDENT' },
+      { userId: 2, role: 'PROFESSOR' },
+    ],
+    [
+      { assigneeId: 7 },
+      { assigneeId: 8 },
+      { assigneeId: null },
+    ],
+    (userId) => (userId === 7 ? 'Alex Johnson' : 'Priya Sharma'),
+  )
+  assert.deepEqual(options.map((option) => option.label), [
+    'Alex Johnson',
+    'Priya Sharma (not a project member)',
+  ])
+  assert.equal(options.find((option) => option.userId === 2), undefined)
+  assert.equal(filterTasks([task(1, 'TODO', null, 8)], 'ALL', today, 8, null)[0].id, 1)
+  assert.equal(filterTasks([task(1, 'TODO', null, 8)], 'ALL', today, 7, null).length, 0)
+  assert.equal(studentFilterOptions([], [], () => 'Nobody').length, 0)
 })
 
 function task(

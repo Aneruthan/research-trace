@@ -67,6 +67,29 @@ export async function updateMeeting(
   return parseJsonResponse<Meeting>(response, `Could not update meeting ${meetingId}`)
 }
 
+export type DeletionImpact = {
+  title: string | null
+  message: string | null
+  blocked: boolean
+  tasks: number
+  taskSuggestions: number
+  extractionReviews: number
+  acceptedReviews: number
+  researchDecisions: number
+  experiments: number
+  results: number
+  researchEvents: number
+  researchChanges: number
+}
+
+export async function getMeetingDeletionImpact(projectId: number, meetingId: number): Promise<DeletionImpact> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/deletion-impact`)
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Could not check what this meeting deletion would affect'))
+  }
+  return parseJsonResponse<DeletionImpact>(response, 'Could not check what this meeting deletion would affect')
+}
+
 export async function deleteMeeting(projectId: number, meetingId: number): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}`, {
     method: 'DELETE',

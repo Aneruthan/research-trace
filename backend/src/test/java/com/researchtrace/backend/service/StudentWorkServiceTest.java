@@ -7,6 +7,7 @@ import com.researchtrace.backend.model.ProjectMemberRole;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.model.User;
+import com.researchtrace.backend.model.UserRole;
 import com.researchtrace.backend.repository.ProjectMemberRepository;
 import com.researchtrace.backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -109,6 +111,46 @@ class StudentWorkServiceTest {
         assertThat(student.getTotalTasks()).isZero();
         assertThat(student.getProgress()).isEqualByComparingTo("0.00");
         assertThat(student.getTasks()).isEmpty();
+    }
+
+    @Test
+    void reportsATaskAssigneeWhoIsMissingFromTheStudentListAndCanRepairAStudent() {
+        when(projectService.getProjectById(1L)).thenReturn(Optional.of(new Project()));
+        when(projectMemberRepository.findByProjectId(1L)).thenReturn(List.of(member(4L, 7L, ProjectMemberRole.STUDENT)));
+        when(taskService.getTasksByProject(1L)).thenReturn(List.of(task(4L, 8L, TaskStatus.TODO, LocalDate.now())));
+        User priya = new User();
+        priya.setId(8L);
+        priya.setName("Priya Sharma");
+        priya.setRole(UserRole.STUDENT);
+        when(userRepository.findById(8L)).thenReturn(Optional.of(priya));
+
+        var gaps = studentWorkService.membershipGaps(1L);
+
+        assertThat(gaps).hasSize(1);
+        assertThat(gaps.get(0).getUserId()).isEqualTo(8L);
+        assertThat(gaps.get(0).getName()).isEqualTo("Priya Sharma");
+        assertThat(gaps.get(0).isRepairable()).isTrue();
+        assertThat(gaps.get(0).getTaskIds()).containsExactly(4L);
+
+        when(projectMemberRepository.save(org.mockito.ArgumentMatchers.any(ProjectMember.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        ProjectMember repaired = studentWorkService.repairStudentMembership(1L, 8L);
+        assertThat(repaired.getRole()).isEqualTo(ProjectMemberRole.STUDENT);
+        assertThat(repaired.getUserId()).isEqualTo(8L);
+        verify(projectMemberRepository).save(org.mockito.ArgumentMatchers.any(ProjectMember.class));
+    }
+
+    @Test
+    void doesNotTurnANonStudentIntoAProjectStudent() {
+        when(projectService.getProjectById(1L)).thenReturn(Optional.of(new Project()));
+        User professor = new User();
+        professor.setId(2L);
+        professor.setRole(UserRole.PROFESSOR);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(professor));
+
+        assertThatThrownBy(() -> studentWorkService.repairStudentMembership(1L, 2L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
 
     private static ProjectMember member(Long id, Long userId, ProjectMemberRole role) {

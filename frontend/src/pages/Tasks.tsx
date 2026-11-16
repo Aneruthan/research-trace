@@ -8,15 +8,16 @@ import {
   type Experiment,
   type ResearchDecision,
 } from '../api/research'
-import { createProjectTask, getProjectProgress, getProjectTasks, updateProjectTask, updateTaskStatus } from '../api/tasks'
+import { createProjectTask, deleteProjectTask, getProjectProgress, getProjectTasks, updateProjectTask, updateTaskStatus } from '../api/tasks'
 import type { Meeting, Milestone, ProjectMember, Task, TaskStatus, User } from '../api/types'
 import { assigneeLabel, getProjectMembers, getUsers } from '../api/users'
+import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { PageHeader } from '../components/common/PageHeader'
 import { NoActiveProject } from '../components/project/NoActiveProject'
 import { useActiveProject } from '../project/ActiveProjectContext'
 import { isCurrentProjectResponse } from '../project/projectSelection'
 import { localIsoDate } from '../components/common/dates'
-import { filterTasks, isOverdueTask, validateTaskDraft, type TaskListFilter } from '../work/work'
+import { filterTasks, isOverdueTask, studentFilterOptions, validateTaskDraft, type TaskListFilter } from '../work/work'
 
 export function Tasks() {
   const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
@@ -41,6 +42,10 @@ export function Tasks() {
   const [milestoneFilter, setMilestoneFilter] = useState('')
   const [draft, setDraft] = useState<Task | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   async function load(projectId: number, signal?: AbortSignal) {
     const [
@@ -81,6 +86,9 @@ export function Tasks() {
     setTasks([])
     setProjectProgress(null)
     setError(null)
+    setStudentFilter('')
+    setMilestoneFilter('')
+    setMessage(null)
     if (projectsLoading) {
       setLoading(true)
       return () => controller.abort()
@@ -171,6 +179,24 @@ export function Tasks() {
     milestoneSelection,
   )
   const studentMembers = members.filter((member) => member.role === 'STUDENT' && member.userId != null)
+  const studentOptions = studentFilterOptions(members, validTasks, (userId) => assigneeLabel(userId, users))
+
+  async function removeTask() {
+    if (deleteTarget?.id == null || activeProjectId == null) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteProjectTask(activeProjectId, deleteTarget.id)
+      setMessage(`Deleted “${deleteTarget.title ?? 'task'}”. The student account, milestone, and research records were kept.`)
+      setDeleteTarget(null)
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
+      await load(activeProjectId)
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete task')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   async function saveDraft(event: React.FormEvent) {
     event.preventDefault()
@@ -219,6 +245,7 @@ export function Tasks() {
         </p>
       ) : null}
       {!loading && usersUnavailable ? <UsersUnavailableNotice /> : null}
+      {message ? <p className="mt-4 rounded-md border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800" role="status">{message}</p> : null}
       {!loading && error ? <Alert message={error} /> : null}
       {!projectsLoading && activeProjectId != null && !loading ? (
         <div className="mt-6 flex flex-wrap gap-2">
@@ -229,7 +256,8 @@ export function Tasks() {
           <label className="text-xs text-stone-600">Student
             <select className="ml-2 rounded-md border border-stone-300 bg-white px-2 py-1" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)}>
               <option value="">All</option>
-              {studentMembers.map((member) => <option key={member.userId} value={member.userId ?? ''}>{assigneeLabel(member.userId, users)}</option>)}
+              {studentOptions.length === 0 ? <option value="" disabled>No students in this project</option> : null}
+              {studentOptions.map((option) => <option key={option.userId} value={option.userId}>{option.label}</option>)}
             </select>
           </label>
           <label className="text-xs text-stone-600">Milestone
@@ -353,6 +381,7 @@ export function Tasks() {
                 </div>
                 <span className="flex items-center gap-2 text-xs font-medium tracking-wide text-stone-500 sm:self-center">
                   <button type="button" className="rounded-md border border-stone-300 px-2 py-1" onClick={() => setDraft(task)}>Edit</button>
+                  <button type="button" className="rounded-md border border-red-300 px-2 py-1 text-red-800" onClick={() => { setDeleteError(null); setDeleteTarget(task) }}>Delete</button>
                   <label className="sr-only" htmlFor={`status-${task.id}`}>Status</label>
                   <select
                     id={`status-${task.id}`}
@@ -371,6 +400,17 @@ export function Tasks() {
             )
           })}
         </ul>
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmDialog
+          title="Delete task"
+          message={`Delete “${deleteTarget.title ?? 'this task'}”? Assignee: ${assigneeLabel(deleteTarget.assigneeId, users)}. Status: ${deleteTarget.status ?? 'unknown'}. Due: ${deleteTarget.dueDate ?? 'no due date'}. Task history for this task is removed. The student account, milestone, meeting, and any research decision or experiment stay.`}
+          confirmLabel="Delete task"
+          busy={deleting}
+          error={deleteError}
+          onConfirm={() => void removeTask()}
+          onCancel={() => { if (!deleting) setDeleteTarget(null) }}
+        />
       ) : null}
     </section>
   )

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getProjectMilestones } from '../api/milestones'
 import { getProjectStudent, type StudentWork } from '../api/students'
-import { createProjectTask } from '../api/tasks'
+import { createProjectTask, deleteProjectTask } from '../api/tasks'
 import type { Milestone, Task, TaskStatus } from '../api/types'
+import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { PageHeader } from '../components/common/PageHeader'
 import { NoActiveProject } from '../components/project/NoActiveProject'
 import { useActiveProject } from '../project/ActiveProjectContext'
@@ -28,6 +29,9 @@ export function StudentDetails() {
   const [draft, setDraft] = useState<StudentTaskDraft | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
+  const [deletingTask, setDeletingTask] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const today = localIsoDate()
   const scopeRef = useRef<string | null>(null)
@@ -123,6 +127,23 @@ export function StudentDetails() {
     }
   }
 
+  async function removeStudentTask() {
+    if (activeProjectId == null || taskToDelete?.id == null) return
+    setDeletingTask(true)
+    setDeleteError(null)
+    try {
+      await deleteProjectTask(activeProjectId, taskToDelete.id)
+      setMessage(`Deleted “${taskToDelete.title ?? 'task'}”.`)
+      setTaskToDelete(null)
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
+      setReloadKey((current) => current + 1)
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete task')
+    } finally {
+      setDeletingTask(false)
+    }
+  }
+
   return (
     <section>
       <PageHeader title={student?.name ?? 'Student'} description="Profile, membership, and tasks for the selected project." />
@@ -197,24 +218,36 @@ export function StudentDetails() {
             ) : (
               <ul className="mt-4 divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white">
                 {tasks.map((task) => (
-                  <StudentTaskRow key={task.id ?? task.title} task={task} milestones={milestones} today={today} />
+                  <StudentTaskRow key={task.id ?? task.title} task={task} milestones={milestones} today={today} onDelete={() => { setDeleteError(null); setTaskToDelete(task) }} />
                 ))}
               </ul>
             )}
           </section>
         </div>
       ) : null}
+      {taskToDelete ? (
+        <ConfirmDialog
+          title="Delete task"
+          message={`Delete “${taskToDelete.title ?? 'this task'}” assigned to ${student?.name ?? 'this student'}? Status: ${taskToDelete.status ?? 'unknown'}. Due: ${taskToDelete.dueDate ?? 'no due date'}. Task history is removed. The student account and research records stay.`}
+          confirmLabel="Delete task"
+          busy={deletingTask}
+          error={deleteError}
+          onConfirm={() => void removeStudentTask()}
+          onCancel={() => { if (!deletingTask) setTaskToDelete(null) }}
+        />
+      ) : null}
     </section>
   )
 }
 
-function StudentTaskRow({ task, milestones, today }: { task: Task; milestones: Milestone[]; today: string }) {
+function StudentTaskRow({ task, milestones, today, onDelete }: { task: Task; milestones: Milestone[]; today: string; onDelete: () => void }) {
   const milestone = task.milestoneId == null
     ? null
     : milestones.find((item) => item.id === task.milestoneId)?.title ?? `Milestone ${task.milestoneId}`
   return (
     <li className="px-4 py-3 text-sm">
       <Link className="font-medium text-stone-950 underline" to={`/tasks/${task.id}`}>{task.title}</Link>
+      <div className="mt-1 flex items-center justify-between gap-2">
       <p className="text-xs text-stone-500">
         {task.status ?? 'No status'}
         {' · '}
@@ -222,6 +255,8 @@ function StudentTaskRow({ task, milestones, today }: { task: Task; milestones: M
         {milestone ? ` · ${milestone}` : ''}
         {isOverdueTask(task, today) ? ' · Overdue' : ''}
       </p>
+      <button type="button" className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-800" onClick={onDelete}>Delete</button>
+      </div>
     </li>
   )
 }

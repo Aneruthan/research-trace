@@ -284,6 +284,35 @@ async function getJson<T>(path: string, signal: AbortSignal | undefined, fallbac
   return parseJsonResponse<T>(response, fallback)
 }
 
+export async function getReviewDeletionImpact(projectId: number, meetingId: number, reviewId: number) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/reviews/${reviewId}/deletion-impact`,
+  )
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not check this extraction review'), response.status)
+  }
+  return response.json() as Promise<{
+    title: string | null
+    message: string | null
+    blocked: boolean
+    researchDecisions: number
+    experiments: number
+    results: number
+    researchEvents: number
+    acceptedReviews: number
+  }>
+}
+
+export async function deleteResearchReview(projectId: number, meetingId: number, reviewId: number): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/reviews/${reviewId}`,
+    { method: 'DELETE' },
+  )
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not delete this extraction review'), response.status)
+  }
+}
+
 export async function getResearchReviews(
   projectId: number,
   meetingId: number,

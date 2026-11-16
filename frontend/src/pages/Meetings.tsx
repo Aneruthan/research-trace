@@ -3,8 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   createProjectMeeting,
   deleteMeeting,
+  getMeetingDeletionImpact,
   getProjectMeetings,
   updateMeeting,
+  type DeletionImpact,
 } from '../api/meetings'
 import type { Meeting } from '../api/types'
 import { localIsoDate } from '../components/common/dates'
@@ -45,6 +47,7 @@ export function Meetings() {
   const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<DeletionImpact | null>(null)
 
   function loadMeetings(projectId: number, signal?: AbortSignal) {
     setLoading(true)
@@ -178,7 +181,13 @@ export function Meetings() {
   function confirmDelete(meeting: Meeting) {
     setMeetingToDelete(meeting)
     setDeleteError(null)
+    setDeleteImpact(null)
     setSuccessMessage(null)
+    if (activeProjectId != null && meeting.id != null) {
+      void getMeetingDeletionImpact(activeProjectId, meeting.id)
+        .then((impact) => setDeleteImpact(impact))
+        .catch((cause: unknown) => setDeleteError(cause instanceof Error ? cause.message : 'Could not check linked records'))
+    }
   }
 
   function cancelDelete() {
@@ -199,6 +208,8 @@ export function Meetings() {
       setMeetings((prev) => prev.filter((m) => m.id !== meetingToDelete.id))
       setSuccessMessage(`Meeting "${meetingToDelete.title}" deleted successfully.`)
       setMeetingToDelete(null)
+      setDeleteImpact(null)
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
     } catch (cause: unknown) {
       setDeleteError(cause instanceof Error ? cause.message : 'Could not delete meeting')
     } finally {
@@ -248,9 +259,10 @@ export function Meetings() {
         <div className="mt-6 rounded-lg border border-red-300 bg-red-50 p-5 shadow-xs">
           <h3 className="text-sm font-semibold text-red-900">Confirm Meeting Deletion</h3>
           <p className="mt-2 text-sm text-red-800">
-            Are you sure you want to delete meeting{' '}
-            <strong className="font-semibold text-red-950">"{meetingToDelete.title}"</strong> (ID: {meetingToDelete.id})?
-            This will permanently remove the meeting.
+            Delete <strong className="font-semibold text-red-950">{meetingToDelete.title ?? 'this meeting'}</strong>
+            {meetingToDelete.meetingDate ? ` dated ${meetingToDelete.meetingDate}` : ''}?
+            {' '}
+            {deleteImpact?.message ?? 'Checking linked tasks, extraction reviews, and research records…'}
           </p>
           {deleteError ? (
             <div className="mt-3 rounded border border-red-400 bg-white p-3 text-xs text-red-700">
@@ -261,7 +273,7 @@ export function Meetings() {
             <button
               type="button"
               onClick={() => void handleDeleteMeeting()}
-              disabled={deleting}
+              disabled={deleting || deleteImpact == null || deleteImpact.blocked}
               className="rounded-md bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-red-500 disabled:opacity-50"
             >
               {deleting ? 'Deleting…' : 'Yes, Delete Meeting'}

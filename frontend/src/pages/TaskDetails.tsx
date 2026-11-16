@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getProjectMeetings } from '../api/meetings'
-import { getProjectTask, getTaskHistory } from '../api/tasks'
+import { deleteProjectTask, getProjectTask, getTaskHistory } from '../api/tasks'
 import type { Meeting, Task } from '../api/types'
 import { assigneeLabel, getUsers } from '../api/users'
 import type { User } from '../api/types'
+import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { PageHeader } from '../components/common/PageHeader'
 import { NoActiveProject } from '../components/project/NoActiveProject'
 import { localIsoDate } from '../components/common/dates'
@@ -15,9 +16,10 @@ import { isOverdueTask } from '../work/work'
 type HistoryItem = { id: number | null; previousStatus: string | null; newStatus: string | null; changedAt: string | null }
 
 export function TaskDetails() {
+  const navigate = useNavigate()
   const { taskId: taskIdParam } = useParams()
   const taskId = Number(taskIdParam)
-  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
+  const { activeProjectId, activeProject, loading: projectsLoading, error: projectsError } = useActiveProject()
   const activeProjectIdRef = useRef(activeProjectId)
   useEffect(() => {
     activeProjectIdRef.current = activeProjectId
@@ -28,6 +30,9 @@ export function TaskDetails() {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -72,10 +77,28 @@ export function TaskDetails() {
   const meeting = meetings.find((item) => item.id === task?.meetingId)
   const overdue = task ? isOverdueTask(task, localIsoDate()) : false
 
+  async function removeTask() {
+    if (activeProjectId == null || task?.id == null) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteProjectTask(activeProjectId, task.id)
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
+      navigate('/tasks')
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete task')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <section>
       <PageHeader title={task?.title ?? 'Task'} description="Task details for the selected project." />
-      <Link className="mt-4 inline-block text-sm text-stone-700 underline" to="/tasks">Back to tasks</Link>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <Link className="text-sm text-stone-700 underline" to="/tasks">Back to tasks</Link>
+        {task ? <button type="button" className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-800" onClick={() => { setDeleteError(null); setConfirming(true) }}>Delete task</button> : null}
+      </div>
       {loading ? <p className="mt-6 text-sm text-stone-600">Loading task…</p> : null}
       {!projectsLoading && (projectsError || activeProjectId == null) ? <NoActiveProject loading={false} error={projectsError} /> : null}
       {error ? <p className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{error}</p> : null}
@@ -96,6 +119,17 @@ export function TaskDetails() {
             </ul>
           )}
         </div>
+      ) : null}
+      {confirming && task ? (
+        <ConfirmDialog
+          title="Delete task"
+          message={`Delete “${task.title ?? 'this task'}”? Assignee: ${assigneeLabel(task.assigneeId, users)}. Project: ${activeProject?.name ?? 'the active project'}. Status: ${task.status ?? 'unknown'}. Due: ${task.dueDate ?? 'no due date'}. Task history for this task is removed. The student, milestone, and research records stay.`}
+          confirmLabel="Delete task"
+          busy={deleting}
+          error={deleteError}
+          onConfirm={() => void removeTask()}
+          onCancel={() => { if (!deleting) setConfirming(false) }}
+        />
       ) : null}
     </section>
   )

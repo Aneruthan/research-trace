@@ -1,9 +1,12 @@
 package com.researchtrace.backend.controller;
 
+import com.researchtrace.backend.dto.MembershipGap;
 import com.researchtrace.backend.dto.StudentWorkView;
+import com.researchtrace.backend.model.ProjectMember;
 import com.researchtrace.backend.service.StudentWorkService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,6 +25,18 @@ public class StudentWorkController {
     @GetMapping
     public List<StudentWorkView> listStudents(@PathVariable Long projectId) {
         return studentWorkService.listStudents(projectId);
+    }
+
+    @GetMapping("/membership-gaps")
+    public List<MembershipGap> membershipGaps(@PathVariable Long projectId) {
+        return studentWorkService.membershipGaps(projectId);
+    }
+
+    @PostMapping("/membership-gaps/{userId}")
+    public ProjectMember repairStudentMembership(
+            @PathVariable Long projectId,
+            @PathVariable Long userId) {
+        return studentWorkService.repairStudentMembership(projectId, userId);
     }
 
     @GetMapping("/{studentId}")

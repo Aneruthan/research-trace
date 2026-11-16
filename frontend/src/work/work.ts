@@ -53,6 +53,40 @@ export function validatePerson(name: string, email: string): string | null {
   return null
 }
 
+export type StudentFilterOption = {
+  userId: number
+  label: string
+  member: boolean
+}
+
+export function studentFilterOptions(
+  members: { userId: number | null; role: string | null }[],
+  tasks: { assigneeId?: number | null }[],
+  nameFor: (userId: number) => string,
+): StudentFilterOption[] {
+  const memberIds = new Set(
+    members
+      .filter((member) => member.role === 'STUDENT' && member.userId != null)
+      .map((member) => member.userId as number),
+  )
+  const ids = new Set<number>(memberIds)
+  for (const task of tasks) {
+    if (task.assigneeId != null) {
+      ids.add(task.assigneeId)
+    }
+  }
+  return [...ids]
+    .map((userId) => {
+      const name = nameFor(userId)
+      return {
+        userId,
+        member: memberIds.has(userId),
+        label: memberIds.has(userId) ? name : `${name} (not a project member)`,
+      }
+    })
+    .sort((left, right) => left.label.localeCompare(right.label))
+}
+
 export function validateTaskDraft(title: string): string | null {
   if (title.trim().length === 0) return 'Task title is required.'
   return null

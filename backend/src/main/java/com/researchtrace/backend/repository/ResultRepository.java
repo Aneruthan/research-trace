@@ -17,5 +17,7 @@ public interface ResultRepository extends JpaRepository<Result, Long> {
 
     List<Result> findByMeetingId(Long meetingId);
 
+    List<Result> findByExtractionReviewId(Long extractionReviewId);
+
     long countByProjectId(Long projectId);
 }

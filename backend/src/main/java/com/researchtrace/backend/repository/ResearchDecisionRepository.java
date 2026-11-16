@@ -21,6 +21,8 @@ public interface ResearchDecisionRepository extends JpaRepository<ResearchDecisi
 
     List<ResearchDecision> findByMeetingId(Long meetingId);
 
+    List<ResearchDecision> findByExtractionReviewId(Long extractionReviewId);
+
     Optional<ResearchDecision> findBySupersedesDecisionId(Long supersedesDecisionId);
 
     List<ResearchDecision> findAllBySupersedesDecisionId(Long supersedesDecisionId);

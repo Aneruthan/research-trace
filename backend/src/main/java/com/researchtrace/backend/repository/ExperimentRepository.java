@@ -17,5 +17,7 @@ public interface ExperimentRepository extends JpaRepository<Experiment, Long> {
 
     List<Experiment> findByMeetingId(Long meetingId);
 
+    List<Experiment> findByExtractionReviewId(Long extractionReviewId);
+
     long countByProjectId(Long projectId);
 }

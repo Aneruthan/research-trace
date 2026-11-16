@@ -10,4 +10,6 @@ public interface TaskHistoryRepository extends JpaRepository<TaskHistory, Long> 
     List<TaskHistory> findByTaskIdOrderByChangedAtAscIdAsc(Long taskId);
 
     List<TaskHistory> findByTaskId(Long taskId);
+
+    void deleteByTaskId(Long taskId);
 }

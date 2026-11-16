@@ -3,6 +3,7 @@ package com.researchtrace.backend.controller;
 import com.researchtrace.backend.dto.ProjectDashboard;
 import com.researchtrace.backend.dto.ProjectWriteRequest;
 import com.researchtrace.backend.model.Experiment;
+import com.researchtrace.backend.dto.DeletionImpact;
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.model.Project;
@@ -118,6 +119,13 @@ public class ProjectController {
             @PathVariable Long meetingId,
             @RequestBody Meeting meeting) {
         return meetingService.updateMeeting(projectId, meetingId, meeting);
+    }
+
+    @GetMapping("/{projectId}/meetings/{meetingId}/deletion-impact")
+    public DeletionImpact meetingDeletionImpact(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId) {
+        return meetingService.deletionImpact(projectId, meetingId);
     }
 
     @DeleteMapping("/{projectId}/meetings/{meetingId}")

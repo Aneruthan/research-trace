@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProjectStudents, type StudentWork } from '../api/students'
+import { getMembershipGaps, getProjectStudents, repairStudentMembership, type MembershipGap, type StudentWork } from '../api/students'
 import type { User } from '../api/types'
 import {
   addProjectMember,
@@ -23,6 +23,7 @@ export function Students() {
     activeProjectIdRef.current = activeProjectId
   }, [activeProjectId])
   const [students, setStudents] = useState<StudentWork[]>([])
+  const [gaps, setGaps] = useState<MembershipGap[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,11 +50,16 @@ export function Students() {
     }
     const projectId = activeProjectId
     setLoading(true)
-    Promise.all([getProjectStudents(projectId, controller.signal), getUsers(controller.signal)])
-      .then(([loadedStudents, loadedUsers]) => {
+    Promise.all([
+      getProjectStudents(projectId, controller.signal),
+      getUsers(controller.signal),
+      getMembershipGaps(projectId, controller.signal).catch(() => [] as MembershipGap[]),
+    ])
+      .then(([loadedStudents, loadedUsers, loadedGaps]) => {
         if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) return
         setStudents(loadedStudents)
         setUsers(loadedUsers)
+        setGaps(loadedGaps)
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) return
@@ -69,13 +75,27 @@ export function Students() {
 
   async function reload() {
     if (activeProjectId == null) return
-    const [loadedStudents, loadedUsers] = await Promise.all([
+    const [loadedStudents, loadedUsers, loadedGaps] = await Promise.all([
       getProjectStudents(activeProjectId),
       getUsers(),
+      getMembershipGaps(activeProjectId).catch(() => [] as MembershipGap[]),
     ])
     if (!isCurrentProjectResponse(activeProjectId, activeProjectIdRef.current)) return
     setStudents(loadedStudents)
     setUsers(loadedUsers)
+    setGaps(loadedGaps)
+  }
+
+  async function repairGap(gap: MembershipGap) {
+    if (activeProjectId == null || gap.userId == null) return
+    setError(null)
+    try {
+      await repairStudentMembership(activeProjectId, gap.userId)
+      setMessage(`${gap.name ?? 'Student'} was added to this project. Existing tasks were left unchanged.`)
+      await reload()
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : 'Could not add this student to the project')
+    }
   }
 
   async function createAndAdd(event: React.FormEvent) {
@@ -173,6 +193,26 @@ export function Students() {
       ) : null}
       {message ? <Notice>{message}</Notice> : null}
       {error ? <Alert message={error} /> : null}
+      {!loading && gaps.length > 0 ? (
+        <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <h2 className="text-sm font-semibold text-amber-950">Students assigned to tasks but missing from this project</h2>
+          <ul className="mt-2 space-y-2 text-sm text-amber-950">
+            {gaps.map((gap) => (
+              <li key={gap.userId ?? gap.name} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {gap.name ?? `User ${gap.userId}`} · {gap.taskIds.length} task{gap.taskIds.length === 1 ? '' : 's'}
+                  {gap.reason === 'NOT_A_STUDENT' ? ' · this user is not a student, so membership was not changed' : ''}
+                </span>
+                {gap.repairable && gap.userId != null ? (
+                  <button type="button" className="rounded-md bg-stone-950 px-2 py-1 text-xs text-white" onClick={() => void repairGap(gap)}>
+                    Add to project
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {!projectsLoading && activeProjectId != null && !loading ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <form className="rounded-lg border border-stone-200 bg-white p-4" onSubmit={(event) => void createAndAdd(event)}>

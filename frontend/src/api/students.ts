@@ -26,6 +26,33 @@ export async function getProjectStudents(projectId: number, signal?: AbortSignal
   return parseJsonResponse<StudentWork[]>(response, 'Could not load students')
 }
 
+export type MembershipGap = {
+  userId: number | null
+  name: string | null
+  email: string | null
+  userRole: string | null
+  reason: string | null
+  repairable: boolean
+  taskIds: number[]
+}
+
+export async function getMembershipGaps(projectId: number, signal?: AbortSignal): Promise<MembershipGap[]> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/students/membership-gaps`, { signal })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Could not load student membership gaps'))
+  }
+  return parseJsonResponse<MembershipGap[]>(response, 'Could not load student membership gaps')
+}
+
+export async function repairStudentMembership(projectId: number, userId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/students/membership-gaps/${userId}`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Could not add this student to the project'))
+  }
+}
+
 export async function getProjectStudent(
   projectId: number,
   studentId: number,

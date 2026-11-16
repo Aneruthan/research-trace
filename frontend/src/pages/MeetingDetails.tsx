@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { getMeeting, updateMeeting } from '../api/meetings'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { deleteMeeting, getMeeting, getMeetingDeletionImpact, updateMeeting, type DeletionImpact } from '../api/meetings'
 import {
   acceptTaskSuggestion,
   extractTaskSuggestions,
@@ -9,8 +9,10 @@ import {
   updateTaskSuggestion,
 } from '../api/taskSuggestions'
 import {
+  deleteResearchReview,
   extractResearch,
   getResearchReviews,
+  getReviewDeletionImpact,
   submitResearchReview,
   type ExtractionReview,
   type MeetingExtraction,
@@ -18,6 +20,7 @@ import {
 } from '../api/research'
 import type { Meeting, SuggestionUpdate, TaskSuggestion } from '../api/types'
 import { getProjectMembers, getUsers } from '../api/users'
+import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { PageHeader } from '../components/common/PageHeader'
 import type { StudentOption } from '../components/meetings/suggestionForm'
 import { SuggestionCard } from '../components/meetings/SuggestionCard'
@@ -30,7 +33,8 @@ import { meetingBelongsToProject } from '../project/projectSelection'
 type ExtractionTab = 'tasks' | 'research'
 
 export function MeetingDetails() {
-  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
+  const navigate = useNavigate()
+  const { activeProjectId, activeProject, loading: projectsLoading, error: projectsError } = useActiveProject()
   const { meetingId: meetingIdParam } = useParams()
   const meetingId = Number(meetingIdParam)
   const meetingIdIsValid = Number.isInteger(meetingId) && meetingId > 0
@@ -52,6 +56,12 @@ export function MeetingDetails() {
   // Research Extraction State
   const [researchReviews, setResearchReviews] = useState<ExtractionReview[]>([])
   const [researchReviewsLoading, setResearchReviewsLoading] = useState(false)
+  const [deleteImpact, setDeleteImpact] = useState<DeletionImpact | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [reviewToDelete, setReviewToDelete] = useState<ExtractionReview | null>(null)
+  const [reviewImpact, setReviewImpact] = useState<DeletionImpact | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [researchExtraction, setResearchExtraction] = useState<MeetingExtraction | null>(null)
   const [originalResearchExtraction, setOriginalResearchExtraction] = useState<MeetingExtraction | null>(null)
   const [extractingResearch, setExtractingResearch] = useState(false)
@@ -329,6 +339,76 @@ export function MeetingDetails() {
     }
   }
 
+  async function askDeleteMeeting() {
+    if (activeProjectId == null || meeting?.id == null) return
+    setDeleteError(null)
+    setDeleteImpact(null)
+    try {
+      setDeleteImpact(await getMeetingDeletionImpact(activeProjectId, meeting.id))
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not check linked records')
+      setDeleteImpact({ title: meeting.title, message: '', blocked: true, tasks: 0, taskSuggestions: 0, extractionReviews: 0, acceptedReviews: 0, researchDecisions: 0, experiments: 0, results: 0, researchEvents: 0, researchChanges: 0 })
+    }
+  }
+
+  async function confirmDeleteMeeting() {
+    if (activeProjectId == null || meeting?.id == null || deleteImpact?.blocked) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteMeeting(activeProjectId, meeting.id)
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
+      navigate('/meetings')
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete meeting')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function askDeleteReview(review: ExtractionReview) {
+    if (activeProjectId == null || meeting?.id == null || review.id == null) return
+    setReviewToDelete(review)
+    setDeleteError(null)
+    try {
+      const impact = await getReviewDeletionImpact(activeProjectId, meeting.id, review.id)
+      setReviewImpact({
+        title: impact.title,
+        message: impact.message,
+        blocked: impact.blocked,
+        tasks: 0,
+        taskSuggestions: 0,
+        extractionReviews: 1,
+        acceptedReviews: impact.acceptedReviews,
+        researchDecisions: impact.researchDecisions,
+        experiments: impact.experiments,
+        results: impact.results,
+        researchEvents: impact.researchEvents,
+        researchChanges: 0,
+      })
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not check this review')
+    }
+  }
+
+  async function confirmDeleteReview() {
+    if (activeProjectId == null || meeting?.id == null || reviewToDelete?.id == null || reviewImpact?.blocked) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteResearchReview(activeProjectId, meeting.id, reviewToDelete.id)
+      setResearchReviews((current) => current.filter((review) => review.id !== reviewToDelete.id))
+      setNotice('Extraction review deleted. The meeting and other reviews were kept.')
+      setReviewToDelete(null)
+      setReviewImpact(null)
+      window.dispatchEvent(new Event('researchtrace-progress-changed'))
+    } catch (cause: unknown) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete this extraction review')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <section>
       <Link to="/meetings" className="text-sm font-medium text-stone-600 hover:text-stone-950">
@@ -345,6 +425,7 @@ export function MeetingDetails() {
       {!projectsLoading && (projectsError || activeProjectId == null) ? (
         <NoActiveProject loading={false} error={projectsError} />
       ) : null}
+      {notice ? <p className="mt-4 rounded-md border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800" role="status">{notice}</p> : null}
       {!meetingLoading && meetingError ? <Alert message={meetingError} /> : null}
       {!projectsLoading && !meetingLoading && !meetingError && meeting && !meetingBelongsToProject(meeting.projectId, activeProjectId) ? (
         <p className="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
@@ -369,6 +450,7 @@ export function MeetingDetails() {
                     </dd>
                   </div>
                 </dl>
+                <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={startEditing}
@@ -376,6 +458,14 @@ export function MeetingDetails() {
                 >
                   Edit Meeting / Notes
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void askDeleteMeeting()}
+                  className="self-start rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-800"
+                >
+                  Delete meeting
+                </button>
+                </div>
               </div>
               <h2 className="mt-4 text-sm font-semibold text-stone-950">Notes / Transcript</h2>
               {meeting.notes != null && meeting.notes.trim().length > 0 ? (
@@ -666,6 +756,9 @@ export function MeetingDetails() {
                               Review #{review.id} · {review.createdAt ?? 'Unknown date'}
                             </span>
                           </div>
+                          <button type="button" className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-800" onClick={() => void askDeleteReview(review)}>
+                            Delete
+                          </button>
                         </div>
                         {parsed ? (
                           <div className="mt-4">
@@ -683,6 +776,30 @@ export function MeetingDetails() {
           </section>
         )}
       </div>
+      {deleteImpact ? (
+        <ConfirmDialog
+          title="Delete meeting"
+          message={`${meeting?.title ?? 'This meeting'}${meeting?.meetingDate ? ` (${meeting.meetingDate})` : ''} in ${activeProject?.name ?? 'the active project'}. ${deleteImpact.message}`}
+          confirmLabel="Delete meeting"
+          busy={deleting}
+          blocked={deleteImpact.blocked}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteMeeting()}
+          onCancel={() => { if (!deleting) { setDeleteImpact(null); setDeleteError(null) } }}
+        />
+      ) : null}
+      {reviewToDelete ? (
+        <ConfirmDialog
+          title="Delete extraction review"
+          message={`Meeting: ${meeting?.title ?? 'this meeting'}. Review #${reviewToDelete.id} · ${reviewToDelete.createdAt ?? 'unknown date'} · ${reviewToDelete.status ?? 'unknown status'}. ${reviewImpact?.message ?? 'Checking accepted research records…'}`}
+          confirmLabel="Delete review"
+          busy={deleting}
+          blocked={reviewImpact?.blocked === true || reviewImpact == null}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteReview()}
+          onCancel={() => { if (!deleting) { setReviewToDelete(null); setReviewImpact(null); setDeleteError(null) } }}
+        />
+      ) : null}
     </section>
   )
 }

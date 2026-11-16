@@ -1,5 +1,8 @@
 package com.researchtrace.backend.service;
 
+import com.researchtrace.backend.dto.DeletionImpact;
+import com.researchtrace.backend.model.ExtractionReview;
+import com.researchtrace.backend.model.ExtractionReviewStatus;
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.ExperimentRepository;
@@ -167,54 +170,73 @@ public class MeetingService {
         deleteMeeting(id, null);
     }
 
+    public DeletionImpact deletionImpact(Long projectId, Long meetingId) {
+        Meeting meeting = requireMeeting(meetingId, projectId);
+        return impactFor(meeting);
+    }
+
     public void deleteMeeting(Long id, @Nullable Long expectedProjectId) {
         if (id == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting ID is required");
         }
-        Meeting meeting = meetingRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + id));
+        Meeting meeting = requireMeeting(id, expectedProjectId);
+        DeletionImpact impact = impactFor(meeting);
+        if (impact.isBlocked()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, impact.getMessage());
+        }
+        meetingRepository.delete(meeting);
+    }
 
+    private Meeting requireMeeting(Long id, @Nullable Long expectedProjectId) {
+        Meeting meeting = meetingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
         if (expectedProjectId != null && !expectedProjectId.equals(meeting.getProjectId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found");
         }
+        return meeting;
+    }
 
-        // Safety check: preserve referential integrity and research provenance.
-        // Never delete a meeting that has accepted research decisions, experiments, results, tasks, or reviews.
-        List<String> dependents = new ArrayList<>();
-        if (taskRepository != null && !taskRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("tasks");
+    private DeletionImpact impactFor(Meeting meeting) {
+        Long id = meeting.getId();
+        DeletionImpact impact = new DeletionImpact();
+        impact.setTitle(meeting.getTitle());
+        impact.setTasks(size(taskRepository == null ? null : taskRepository.findByMeetingId(id)));
+        impact.setTaskSuggestions(size(taskSuggestionRepository == null ? null : taskSuggestionRepository.findByMeetingId(id)));
+        List<ExtractionReview> reviews = extractionReviewRepository == null ? List.of() : extractionReviewRepository.findByMeetingId(id);
+        impact.setExtractionReviews(reviews.size());
+        impact.setAcceptedReviews((int) reviews.stream()
+            .filter(review -> review.getStatus() == ExtractionReviewStatus.ACCEPTED)
+            .count());
+        impact.setResearchDecisions(size(researchDecisionRepository == null ? null : researchDecisionRepository.findByMeetingId(id)));
+        impact.setExperiments(size(experimentRepository == null ? null : experimentRepository.findByMeetingId(id)));
+        impact.setResults(size(resultRepository == null ? null : resultRepository.findByMeetingId(id)));
+        impact.setResearchEvents(size(researchEventRepository == null ? null : researchEventRepository.findByMeetingId(id)));
+        impact.setResearchChanges(size(researchChangeRepository == null ? null : researchChangeRepository.findByMeetingId(id)));
+        boolean blocked = impact.getTasks() + impact.getTaskSuggestions() + impact.getExtractionReviews()
+            + impact.getResearchDecisions() + impact.getExperiments() + impact.getResults()
+            + impact.getResearchEvents() + impact.getResearchChanges() > 0;
+        impact.setBlocked(blocked);
+        if (blocked) {
+            impact.setMessage("Cannot delete this meeting because it has linked research records. "
+                + "Deletion rejected to protect research provenance. "
+                + "tasks: " + impact.getTasks()
+                + ". Task suggestions: " + impact.getTaskSuggestions()
+                + ". Extraction reviews: " + impact.getExtractionReviews()
+                + " (" + impact.getAcceptedReviews() + " accepted). "
+                + "Decisions: " + impact.getResearchDecisions()
+                + ". Experiments: " + impact.getExperiments()
+                + ". Results: " + impact.getResults()
+                + ". Research events: " + impact.getResearchEvents()
+                + ". Research changes: " + impact.getResearchChanges()
+                + ". Remove or detach those records first. Nothing was deleted.");
+        } else {
+            impact.setMessage("This meeting has no linked tasks, reviews, or research records. Only the meeting will be deleted.");
         }
-        if (taskSuggestionRepository != null && !taskSuggestionRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("task suggestions");
-        }
-        if (researchDecisionRepository != null && !researchDecisionRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("research decisions");
-        }
-        if (experimentRepository != null && !experimentRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("experiments");
-        }
-        if (resultRepository != null && !resultRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("results");
-        }
-        if (extractionReviewRepository != null && !extractionReviewRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("extraction reviews");
-        }
-        if (researchEventRepository != null && !researchEventRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("research events");
-        }
-        if (researchChangeRepository != null && !researchChangeRepository.findByMeetingId(id).isEmpty()) {
-            dependents.add("research changes");
-        }
+        return impact;
+    }
 
-        if (!dependents.isEmpty()) {
-            throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Cannot delete meeting " + id + " ('" + meeting.getTitle() + "') because it has linked research records (" +
-                String.join(", ", dependents) + "). Deletion rejected to protect research provenance."
-            );
-        }
-
-        meetingRepository.delete(meeting);
+    private static int size(List<?> values) {
+        return values == null ? 0 : values.size();
     }
 
     private static void rejectLongTitle(String title) {
