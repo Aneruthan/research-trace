@@ -1,5 +1,6 @@
 package com.researchtrace.backend.config;
 
+import com.researchtrace.backend.ai.TaskExtractionException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,13 @@ import java.util.stream.Collectors;
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(TaskExtractionException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskExtractionFailure(
+            TaskExtractionException exception,
+            HttpServletRequest request) {
+        return errorBody(HttpStatus.BAD_GATEWAY, HttpHeaders.EMPTY, safeExtractionMessage(exception), request);
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatus(
@@ -51,6 +59,18 @@ public class ApiExceptionHandler {
             .collect(Collectors.joining("; "));
         return errorBody(HttpStatus.BAD_REQUEST, HttpHeaders.EMPTY,
             message.isEmpty() ? "Invalid request body" : message, request);
+    }
+
+    private static String safeExtractionMessage(TaskExtractionException exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return "Task extraction failed. The model response could not be used.";
+        }
+        String lower = message.toLowerCase();
+        if (lower.contains("api key") || lower.contains("api-key") || message.contains("AIza")) {
+            return "Task extraction failed. The model response could not be used.";
+        }
+        return message;
     }
 
     private static ResponseEntity<Map<String, Object>> errorBody(

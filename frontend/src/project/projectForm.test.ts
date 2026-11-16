@@ -1,13 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
+  PROJECT_FORM_CONTROLS,
   archiveConfirmation,
   emptyProjectForm,
+  projectFormIncludesExistingStudentSelection,
   projectToForm,
   toProjectWriteRequest,
   validateProjectForm,
 } from './projectForm.ts'
 import type { Project } from '../api/types.ts'
+
+test('project create and edit forms do not select existing students', () => {
+  assert.equal(projectFormIncludesExistingStudentSelection('create'), false)
+  assert.equal(projectFormIncludesExistingStudentSelection('edit'), false)
+  assert.equal((PROJECT_FORM_CONTROLS as readonly string[]).includes('Students'), false)
+  const source = readFileSync(new URL('../pages/Projects.tsx', import.meta.url), 'utf8')
+  assert.equal(source.includes('type="checkbox"'), false)
+  assert.equal(source.includes('Select one or more existing students'), false)
+  assert.equal(source.includes('membershipChanges'), false)
+  assert.equal(source.includes('removeProjectMember'), false)
+  assert.match(source, /formatAssignedStudents/)
+})
 
 test('create project form requires a name and rejects an inverted date range', () => {
   assert.equal(validateProjectForm(emptyProjectForm), 'Project name is required.')

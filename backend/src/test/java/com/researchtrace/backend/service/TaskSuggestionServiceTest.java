@@ -1,6 +1,7 @@
 package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.ai.ExtractedTask;
+import com.researchtrace.backend.ai.TaskExtractionException;
 import com.researchtrace.backend.ai.TaskExtractionInput;
 import com.researchtrace.backend.ai.TaskExtractionInput.MilestoneCandidate;
 import com.researchtrace.backend.ai.TaskExtractionInput.StudentCandidate;
@@ -209,7 +210,7 @@ class TaskSuggestionServiceTest {
 
         service.extract(MEETING_ID);
 
-        verifyNoInteractions(taskRepository);
+        verify(taskRepository, never()).save(any());
     }
 
     @Test
@@ -353,6 +354,77 @@ class TaskSuggestionServiceTest {
 
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.extract(MEETING_ID));
         verifyNoInteractions(taskExtractor);
+    }
+
+    @Test
+    void projectScopedExtractionUsesTheSavedMeetingAndProject() {
+        givenExtractedTasks(extracted("Write related work", null, null));
+
+        List<TaskSuggestion> suggestions = service.extract(PROJECT_ID, MEETING_ID);
+
+        TaskExtractionInput input = capturedExtractionInput();
+        assertThat(input.notes()).isEqualTo("ACTION: Aneruthan | Run Qwen baseline | 2026-10-05");
+        assertThat(suggestions).singleElement().satisfies(suggestion -> {
+            assertThat(suggestion.getProjectId()).isEqualTo(PROJECT_ID);
+            assertThat(suggestion.getMeetingId()).isEqualTo(MEETING_ID);
+            assertThat(suggestion.getTitle()).isEqualTo("Write related work");
+        });
+    }
+
+    @Test
+    void projectScopedExtractionRejectsAnotherProject() {
+        assertStatus(HttpStatus.NOT_FOUND, () -> service.extract(OTHER_PROJECT_ID, MEETING_ID));
+        verifyNoInteractions(taskExtractor);
+    }
+
+    @Test
+    void blankNotesDoNotExtractOrReplaceSuggestions() {
+        Meeting blank = meeting(PROJECT_ID);
+        blank.setNotes("   ");
+        when(meetingRepository.findById(MEETING_ID)).thenReturn(Optional.of(blank));
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.extract(PROJECT_ID, MEETING_ID));
+
+        verifyNoInteractions(taskExtractor);
+        verify(taskSuggestionRepository, never()).deleteByMeetingIdAndStatus(any(), any());
+        verify(taskSuggestionRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void extractionFailureIsNotSavedAsAnEmptyResult() {
+        when(taskExtractor.extract(any())).thenThrow(
+            new TaskExtractionException("Task extraction failed. The model response could not be used."));
+
+        assertThatThrownBy(() -> service.extract(MEETING_ID)).isInstanceOf(TaskExtractionException.class);
+
+        verify(taskSuggestionRepository, never()).deleteByMeetingIdAndStatus(any(), any());
+        verify(taskSuggestionRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void reExtractionDoesNotDuplicateAcceptedTasksOrPendingTitles() {
+        TaskSuggestion accepted = suggestionWithStatus(9L, TaskSuggestionStatus.ACCEPTED);
+        accepted.setTitle("Run Qwen baseline");
+        TaskSuggestion rejected = suggestionWithStatus(10L, TaskSuggestionStatus.REJECTED);
+        rejected.setTitle("Prepare dataset statistics");
+        when(taskSuggestionRepository.findByMeetingId(MEETING_ID)).thenReturn(List.of(accepted, rejected));
+        Task existingTask = new Task();
+        existingTask.setTitle("Run Qwen baseline");
+        when(taskRepository.findByMeetingId(MEETING_ID)).thenReturn(List.of(existingTask));
+        givenExtractedTasks(
+            extracted("Run Qwen baseline", ANERUTHAN_ID, null),
+            extracted("Run Qwen baseline", ANERUTHAN_ID, null),
+            extracted("Prepare dataset statistics", GAYATHRI_ID, null),
+            extracted("Write related work", null, null));
+
+        List<TaskSuggestion> suggestions = service.extract(MEETING_ID);
+
+        assertThat(suggestions).extracting(TaskSuggestion::getTitle, TaskSuggestion::getStatus)
+            .containsExactly(
+                tuple("Prepare dataset statistics", TaskSuggestionStatus.PENDING),
+                tuple("Write related work", TaskSuggestionStatus.PENDING));
+        assertThat(accepted.getStatus()).isEqualTo(TaskSuggestionStatus.ACCEPTED);
+        assertThat(rejected.getStatus()).isEqualTo(TaskSuggestionStatus.REJECTED);
     }
 
     // ----- Listing and editing -----
@@ -533,6 +605,20 @@ class TaskSuggestionServiceTest {
 
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.accept(SUGGESTION_ID, null));
         verifyNoInteractions(taskRepository);
+    }
+
+    @Test
+    void acceptingAnExistingSuggestionTaskDoesNotCreateAnotherTask() {
+        givenSuggestion(pendingSuggestion(SUGGESTION_ID));
+        Task existing = new Task();
+        existing.setId(CREATED_TASK_ID);
+        existing.setMilestoneId(BASELINE_MILESTONE_ID);
+        when(taskRepository.findByTaskSuggestionId(SUGGESTION_ID)).thenReturn(List.of(existing));
+
+        Task result = service.accept(SUGGESTION_ID, null);
+
+        assertThat(result.getId()).isEqualTo(CREATED_TASK_ID);
+        verify(taskRepository, never()).save(any());
     }
 
     @Test

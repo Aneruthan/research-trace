@@ -1,6 +1,7 @@
 package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.ai.ExtractedTask;
+import com.researchtrace.backend.ai.TaskExtractionException;
 import com.researchtrace.backend.ai.TaskExtractionInput;
 import com.researchtrace.backend.ai.TaskExtractionInput.MilestoneCandidate;
 import com.researchtrace.backend.ai.TaskExtractionInput.StudentCandidate;
@@ -28,13 +29,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,6 +49,8 @@ import java.util.stream.Collectors;
 public class TaskSuggestionService {
 
     static final int MAX_TEXT_LENGTH = 255;
+
+    private static final Logger log = LoggerFactory.getLogger(TaskSuggestionService.class);
 
     private static final int CONFIDENCE_SCALE = 2;
 
@@ -109,6 +117,10 @@ public class TaskSuggestionService {
             throw badRequest("Meeting is not linked to a project");
         }
 
+        if (meeting.getNotes() == null || meeting.getNotes().isBlank()) {
+            throw badRequest("Meeting notes are required before task extraction");
+        }
+
         List<StudentCandidate> students = loadStudents(projectId);
         List<MilestoneCandidate> milestones = loadMilestones(projectId);
 
@@ -126,19 +138,66 @@ public class TaskSuggestionService {
             .map(MilestoneCandidate::id)
             .collect(Collectors.toSet());
 
+        if (extracted == null) {
+            throw new TaskExtractionException("Task extraction failed. The model response could not be used.");
+        }
+
         List<TaskSuggestion> suggestions = new ArrayList<>();
-        if (extracted != null) {
-            for (ExtractedTask task : extracted) {
-                TaskSuggestion suggestion = toPendingSuggestion(
-                    task, meetingId, projectId, studentIds, milestoneIds);
-                if (suggestion != null) {
-                    suggestions.add(suggestion);
+        for (ExtractedTask task : extracted) {
+            TaskSuggestion suggestion = toPendingSuggestion(
+                task, meetingId, projectId, studentIds, milestoneIds);
+            if (suggestion != null) {
+                suggestions.add(suggestion);
+            }
+        }
+
+        List<TaskSuggestion> unique = withoutReviewedDuplicates(meetingId, suggestions);
+        log.info("Task extraction for meeting {} produced {} suggestion(s)", meetingId, unique.size());
+        taskSuggestionRepository.deleteByMeetingIdAndStatus(meetingId, TaskSuggestionStatus.PENDING);
+        return taskSuggestionRepository.saveAll(unique);
+    }
+
+    private List<TaskSuggestion> withoutReviewedDuplicates(Long meetingId, List<TaskSuggestion> suggestions) {
+        Set<String> blockedTitles = new HashSet<>();
+        List<TaskSuggestion> existingSuggestions = taskSuggestionRepository.findByMeetingId(meetingId);
+        if (existingSuggestions != null) {
+            for (TaskSuggestion existing : existingSuggestions) {
+                if (existing != null && existing.getStatus() == TaskSuggestionStatus.ACCEPTED) {
+                    addTitle(blockedTitles, existing.getTitle());
+                }
+            }
+        }
+        List<Task> existingTasks = taskRepository.findByMeetingId(meetingId);
+        if (existingTasks != null) {
+            for (Task task : existingTasks) {
+                if (task != null) {
+                    addTitle(blockedTitles, task.getTitle());
                 }
             }
         }
 
-        taskSuggestionRepository.deleteByMeetingIdAndStatus(meetingId, TaskSuggestionStatus.PENDING);
-        return taskSuggestionRepository.saveAll(suggestions);
+        List<TaskSuggestion> unique = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (TaskSuggestion suggestion : suggestions) {
+            String key = normalizedTitle(suggestion.getTitle());
+            if (key == null || blockedTitles.contains(key) || !seen.add(key)) {
+                continue;
+            }
+            unique.add(suggestion);
+        }
+        return unique;
+    }
+
+    private void addTitle(Set<String> titles, String title) {
+        String key = normalizedTitle(title);
+        if (key != null) {
+            titles.add(key);
+        }
+    }
+
+    private String normalizedTitle(String title) {
+        String trimmed = trimToNull(title);
+        return trimmed == null ? null : trimmed.toLowerCase(Locale.ROOT);
     }
 
     @Transactional(readOnly = true)
@@ -198,7 +257,7 @@ public class TaskSuggestionService {
         task.setUpdatedAt(now);
         // Guard against duplicate task creation if a task for this suggestion already exists
         List<Task> existingForSuggestion = taskRepository.findByTaskSuggestionId(suggestionId);
-        if (!existingForSuggestion.isEmpty()) {
+        if (existingForSuggestion != null && !existingForSuggestion.isEmpty()) {
             Task existingTask = existingForSuggestion.get(0);
             suggestion.setStatus(TaskSuggestionStatus.ACCEPTED);
             suggestion.setAcceptedTaskId(existingTask.getId());

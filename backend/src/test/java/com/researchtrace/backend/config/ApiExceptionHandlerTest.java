@@ -1,8 +1,11 @@
 package com.researchtrace.backend.config;
 
+import com.researchtrace.backend.ai.TaskExtractionException;
+import com.researchtrace.backend.controller.TaskSuggestionController;
 import com.researchtrace.backend.dto.MilestoneUpdateRequest;
 import com.researchtrace.backend.controller.MilestoneController;
 import com.researchtrace.backend.controller.ResearchTraceController;
+import com.researchtrace.backend.service.TaskSuggestionService;
 import com.researchtrace.backend.research.ChangeDetectionService;
 import com.researchtrace.backend.research.ResearchTraceService;
 import com.researchtrace.backend.service.MilestoneService;
@@ -26,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({MilestoneController.class, ResearchTraceController.class})
+@WebMvcTest({MilestoneController.class, ResearchTraceController.class, TaskSuggestionController.class})
 class ApiExceptionHandlerTest {
 
     @Autowired
@@ -43,6 +46,9 @@ class ApiExceptionHandlerTest {
 
     @MockitoBean
     private ChangeDetectionService changeDetectionService;
+
+    @MockitoBean
+    private TaskSuggestionService taskSuggestionService;
 
     @Test
     void serviceRejectionReturnsItsReason() throws Exception {
@@ -82,5 +88,16 @@ class ApiExceptionHandlerTest {
             .andExpect(jsonPath("$.message").value("Title must be at most 255 characters"));
 
         verify(researchTraceService, never()).supersedeDecision(any(), any(), any());
+    }
+
+    @Test
+    void taskExtractionFailureReturnsASafeMessage() throws Exception {
+        when(taskSuggestionService.extract(1L, 2L)).thenThrow(new TaskExtractionException(
+            "Task extraction failed. The model response could not be used."));
+
+        mockMvc.perform(post("/api/projects/1/meetings/2/task-suggestions/extract"))
+            .andExpect(status().isBadGateway())
+            .andExpect(jsonPath("$.message").value(
+                "Task extraction failed. The model response could not be used."));
     }
 }

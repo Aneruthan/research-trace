@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createProject, updateProject } from '../api/projects'
 import { getProjectProgress } from '../api/tasks'
 import type { Project, ProjectMember, User } from '../api/types'
-import { addProjectMember, getProjectMembers, getUsers, removeProjectMember } from '../api/users'
+import { getProjectMembers, getUsers } from '../api/users'
 import { PageHeader } from '../components/common/PageHeader'
 import { formatDateOrTimestamp } from '../components/common/dates'
 import { useActiveProject } from '../project/ActiveProjectContext'
@@ -18,11 +18,7 @@ import {
 import {
   formatAssignedStudents,
   hiddenStudentNames,
-  membershipChanges,
-  selectedStudentIds,
   studentNames,
-  studentUsers,
-  validateStudentSelection,
 } from '../project/projectStudents'
 import { visibleProjects } from '../project/projectSelection'
 
@@ -33,13 +29,10 @@ export function Projects() {
   const [usersError, setUsersError] = useState<string | null>(null)
   const [progressById, setProgressById] = useState<Record<number, number | null>>({})
   const [membersByProject, setMembersByProject] = useState<Record<number, ProjectMember[]>>({})
-  const [membersFailed, setMembersFailed] = useState<Record<number, boolean>>({})
   const [expandedStudents, setExpandedStudents] = useState<Record<number, boolean>>({})
   const [mode, setMode] = useState<'closed' | 'create' | 'edit'>('closed')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<ProjectFormValues>(emptyProjectForm)
-  const [studentIds, setStudentIds] = useState<number[]>([])
-  const prefillEditId = useRef<number | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -72,12 +65,9 @@ export function Projects() {
       ids.map(async (id) => {
         const [progress, members] = await Promise.all([
           getProjectProgress(id, controller.signal).catch(() => null),
-          getProjectMembers(id, controller.signal).then(
-            (loaded) => ({ loaded, failed: false }),
-            () => ({ loaded: [] as ProjectMember[], failed: true }),
-          ),
+          getProjectMembers(id, controller.signal).catch(() => [] as ProjectMember[]),
         ])
-        return [id, progress, members.loaded, members.failed] as const
+        return [id, progress, members] as const
       }),
     ).then((entries) => {
       if (controller.signal.aborted) {
@@ -85,25 +75,16 @@ export function Projects() {
       }
       setProgressById(Object.fromEntries(entries.map(([id, progress]) => [id, progress])))
       setMembersByProject(Object.fromEntries(entries.map(([id, , members]) => [id, members])))
-      setMembersFailed(Object.fromEntries(entries.map(([id, , , failed]) => [id, failed])))
-      const pendingId = prefillEditId.current
-      const pending = pendingId == null ? null : entries.find(([id]) => id === pendingId)
-      if (pending && !pending[3]) {
-        setStudentIds(selectedStudentIds(pending[2]))
-        prefillEditId.current = null
-      }
     })
     return () => controller.abort()
   }, [projects, loading, error])
 
   const listed = visibleProjects(projects, false)
-  const students = studentUsers(users)
 
   function openCreate() {
     setMode('create')
     setEditingId(null)
     setForm(emptyProjectForm)
-    setStudentIds([])
     setFormError(null)
     setMessage(null)
   }
@@ -121,14 +102,6 @@ export function Projects() {
     setMode('edit')
     setEditingId(project.id)
     setForm(projectToForm(project))
-    const loadedMembers = membersByProject[project.id]
-    if (loadedMembers == null) {
-      prefillEditId.current = project.id
-      setStudentIds([])
-    } else {
-      prefillEditId.current = null
-      setStudentIds(selectedStudentIds(loadedMembers))
-    }
     setFormError(null)
     setMessage(null)
   }
@@ -138,15 +111,6 @@ export function Projects() {
     const validation = validateProjectForm(form)
     if (validation) {
       setFormError(validation)
-      return
-    }
-    if (mode === 'edit' && editingId != null && membersByProject[editingId] == null && !membersFailed[editingId]) {
-      setFormError('Students are still loading. Wait a moment and save again.')
-      return
-    }
-    const studentError = validateStudentSelection(studentIds, users)
-    if (studentError) {
-      setFormError(studentError)
       return
     }
     setSaving(true)
@@ -163,21 +127,8 @@ export function Projects() {
       if (projectId == null) {
         throw new Error('Saved project has no id')
       }
-      let membershipNote = ''
-      if (mode === 'edit' && membersFailed[projectId]) {
-        membershipNote = ' Student assignments were not changed because members could not be loaded.'
-      } else {
-        const current = mode === 'edit' ? membersByProject[projectId] ?? [] : []
-        const plan = membershipChanges(current, studentIds)
-        for (const userId of plan.addUserIds) {
-          await addProjectMember(projectId, { userId, role: 'STUDENT' })
-        }
-        for (const memberId of plan.removeMembershipIds) {
-          await removeProjectMember(projectId, memberId)
-        }
-      }
       await refreshProjects(projectId)
-      setMessage(mode === 'edit' ? `Project updated.${membershipNote}` : 'Project created.')
+      setMessage(mode === 'edit' ? 'Project updated.' : 'Project created.')
       setMode('closed')
     } catch (cause: unknown) {
       setFormError(cause instanceof Error ? cause.message : 'Could not save the project')
@@ -224,12 +175,9 @@ export function Projects() {
         <ProjectForm
           mode={mode}
           form={form}
-          students={students}
-          studentIds={studentIds}
           saving={saving}
           formError={formError}
           onChange={setForm}
-          onStudentIdsChange={setStudentIds}
           onSubmit={(event) => void submitForm(event)}
           onCancel={() => setMode('closed')}
         />
@@ -324,23 +272,17 @@ export function Projects() {
 function ProjectForm({
   mode,
   form,
-  students,
-  studentIds,
   saving,
   formError,
   onChange,
-  onStudentIdsChange,
   onSubmit,
   onCancel,
 }: {
   mode: 'create' | 'edit'
   form: ProjectFormValues
-  students: User[]
-  studentIds: number[]
   saving: boolean
   formError: string | null
   onChange: (values: ProjectFormValues) => void
-  onStudentIdsChange: (ids: number[]) => void
   onSubmit: (event: React.FormEvent) => void
   onCancel: () => void
 }) {
@@ -390,32 +332,6 @@ function ProjectForm({
           />
         </Field>
       </div>
-      <fieldset className="rounded-md border border-stone-200 p-3">
-        <legend className="px-1 text-xs font-medium text-stone-700">Students</legend>
-        <p className="text-xs text-stone-500">Select one or more existing students. Leave this empty for an unassigned project.</p>
-        {students.length === 0 ? (
-          <p className="mt-2 text-sm text-stone-600">No students exist yet. Create them on the Students page, then assign them here.</p>
-        ) : (
-          <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
-            {students.map((student) => {
-              const id = student.id as number
-              const checked = studentIds.includes(id)
-              return (
-                <label key={id} className="flex items-center gap-2 text-sm text-stone-800">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => onStudentIdsChange(
-                      checked ? studentIds.filter((studentId) => studentId !== id) : [...studentIds, id],
-                    )}
-                  />
-                  {student.name ?? 'Unnamed student'}
-                </label>
-              )
-            })}
-          </div>
-        )}
-      </fieldset>
       <div className="flex gap-2">
         <button
           type="submit"

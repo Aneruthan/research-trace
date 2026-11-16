@@ -4,11 +4,8 @@ import type { ProjectMember, User } from '../api/types.ts'
 import {
   formatAssignedStudents,
   hiddenStudentNames,
-  membershipChanges,
   selectedStudentIds,
   studentNames,
-  studentUsers,
-  validateStudentSelection,
 } from './projectStudents.ts'
 
 const users: User[] = [
@@ -22,30 +19,11 @@ function member(id: number, userId: number, role: ProjectMember['role'] = 'STUDE
   return { id, projectId: 1, userId, role }
 }
 
-test('project creation can select multiple existing students and reject other users', () => {
-  assert.deepEqual(studentUsers(users).map((user) => user.name), ['Alex Johnson', 'Priya Sharma', 'Rahul Kumar'])
-  assert.equal(validateStudentSelection([2, 3, 4], users), null)
-  assert.equal(validateStudentSelection([], users), null)
-  assert.match(validateStudentSelection([9], users) ?? '', /existing students/)
-  const plan = membershipChanges([], [2, 3, 3, 4])
-  assert.deepEqual(plan.addUserIds, [2, 3, 4])
-  assert.deepEqual(plan.removeMembershipIds, [])
-})
-
-test('editing a project adds a student without duplicating current memberships', () => {
-  const current = [member(10, 2), member(11, 3)]
-  const plan = membershipChanges(current, [2, 3, 4])
-  assert.deepEqual(plan.addUserIds, [4])
-  assert.deepEqual(plan.removeMembershipIds, [])
-  assert.deepEqual(selectedStudentIds(current), [2, 3])
-})
-
-test('removing a student drops the membership and keeps the user id out of the delete list', () => {
+test('existing project student names stay visible without changing memberships', () => {
   const current = [member(10, 2), member(11, 3), member(12, 9, 'PROFESSOR')]
-  const plan = membershipChanges(current, [2])
-  assert.deepEqual(plan.removeMembershipIds, [11])
-  assert.equal(plan.removeMembershipIds.includes(3), false)
-  assert.deepEqual(plan.addUserIds, [])
+  assert.deepEqual(selectedStudentIds(current), [2, 3])
+  assert.deepEqual(studentNames(current, users), ['Alex Johnson', 'Priya Sharma'])
+  assert.equal(formatAssignedStudents(studentNames(current, users)), 'Students: Alex Johnson, Priya Sharma')
 })
 
 test('unassigned and multiple student names stay readable', () => {

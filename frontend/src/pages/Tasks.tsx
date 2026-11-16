@@ -82,6 +82,18 @@ export function Tasks() {
   }
 
   useEffect(() => {
+    const onProgress = () => {
+      const projectId = activeProjectIdRef.current
+      if (projectId == null) {
+        return
+      }
+      void load(projectId).catch(() => undefined)
+    }
+    window.addEventListener('researchtrace-progress-changed', onProgress)
+    return () => window.removeEventListener('researchtrace-progress-changed', onProgress)
+  }, [activeProjectId])
+
+  useEffect(() => {
     const controller = new AbortController()
     setTasks([])
     setProjectProgress(null)

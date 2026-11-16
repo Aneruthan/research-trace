@@ -1,5 +1,7 @@
 package com.researchtrace.backend.ai;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.math.BigDecimal;
@@ -54,6 +56,8 @@ public class GeminiTaskExtractor implements TaskExtractor {
             - Do not create, update, or delete any database records.
             """;
 
+    private static final Logger log = LoggerFactory.getLogger(GeminiTaskExtractor.class);
+
     private final ChatClient chatClient;
 
     public GeminiTaskExtractor(ChatClient chatClient) {
@@ -76,20 +80,29 @@ public class GeminiTaskExtractor implements TaskExtractor {
                     .call()
                     .entity(GeminiTaskExtractionResponse.class);
         } catch (Exception e) {
-            throw new TaskExtractionException("Failed to extract tasks using Gemini: " + e.getMessage(), e);
+            log.warn("Gemini task extraction failed ({})", e.getClass().getSimpleName());
+            throw new TaskExtractionException("Task extraction failed. The model response could not be used.", e);
         }
 
+        return tasksFromResponse(response, input);
+    }
+
+    static List<ExtractedTask> tasksFromResponse(GeminiTaskExtractionResponse response, TaskExtractionInput input) {
         if (response == null || response.tasks() == null) {
-            return List.of();
+            throw new TaskExtractionException("Gemini returned malformed task extraction output");
         }
 
-        Set<Long> validStudentIds = input.students().stream()
-                .map(TaskExtractionInput.StudentCandidate::id)
-                .collect(Collectors.toSet());
+        Set<Long> validStudentIds = input.students() == null
+                ? Set.of()
+                : input.students().stream()
+                    .map(TaskExtractionInput.StudentCandidate::id)
+                    .collect(Collectors.toSet());
 
-        Set<Long> validMilestoneIds = input.milestones().stream()
-                .map(TaskExtractionInput.MilestoneCandidate::id)
-                .collect(Collectors.toSet());
+        Set<Long> validMilestoneIds = input.milestones() == null
+                ? Set.of()
+                : input.milestones().stream()
+                    .map(TaskExtractionInput.MilestoneCandidate::id)
+                    .collect(Collectors.toSet());
 
         List<ExtractedTask> result = new ArrayList<>();
         for (GeminiTaskDto dto : response.tasks()) {
@@ -166,7 +179,7 @@ public class GeminiTaskExtractor implements TaskExtractor {
         return sb.toString();
     }
 
-    private LocalDate parseDueDate(String rawDate) {
+    private static LocalDate parseDueDate(String rawDate) {
         if (rawDate == null || rawDate.isBlank()) {
             return null;
         }
@@ -178,7 +191,7 @@ public class GeminiTaskExtractor implements TaskExtractor {
         }
     }
 
-    private String trimToNull(String value) {
+    private static String trimToNull(String value) {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;

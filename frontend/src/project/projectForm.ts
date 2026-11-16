@@ -62,6 +62,22 @@ export function toProjectWriteRequest(values: ProjectFormValues): ProjectWriteRe
   }
 }
 
+export const PROJECT_FORM_CONTROLS = [
+  'Project name',
+  'Description',
+  'Research objectives',
+  'Start date',
+  'Target completion date',
+] as const
+
+export function projectFormIncludesExistingStudentSelection(mode: 'create' | 'edit'): boolean {
+  switch (mode) {
+    case 'create':
+    case 'edit':
+      return false
+  }
+}
+
 export function archiveConfirmation(projectName: string | null): string {
   const name = projectName?.trim() ? projectName.trim() : 'this project'
   return `Archive ${name}? Meetings, tasks, milestones, and research history will be kept. The project will leave the active project list.`

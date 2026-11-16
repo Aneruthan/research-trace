@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMembershipGaps, getProjectStudents, repairStudentMembership, type MembershipGap, type StudentWork } from '../api/students'
 import type { User } from '../api/types'
@@ -73,7 +73,7 @@ export function Students() {
     return () => controller.abort()
   }, [activeProjectId, projectsLoading, projectsError])
 
-  async function reload() {
+  const reload = useCallback(async () => {
     if (activeProjectId == null) return
     const [loadedStudents, loadedUsers, loadedGaps] = await Promise.all([
       getProjectStudents(activeProjectId),
@@ -84,7 +84,15 @@ export function Students() {
     setStudents(loadedStudents)
     setUsers(loadedUsers)
     setGaps(loadedGaps)
-  }
+  }, [activeProjectId])
+
+  useEffect(() => {
+    const onProgress = () => {
+      void reload().catch(() => undefined)
+    }
+    window.addEventListener('researchtrace-progress-changed', onProgress)
+    return () => window.removeEventListener('researchtrace-progress-changed', onProgress)
+  }, [reload])
 
   async function repairGap(gap: MembershipGap) {
     if (activeProjectId == null || gap.userId == null) return

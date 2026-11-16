@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { deleteMeeting, getMeeting, getMeetingDeletionImpact, updateMeeting, type DeletionImpact } from '../api/meetings'
 import {
   acceptTaskSuggestion,
-  extractTaskSuggestions,
   getTaskSuggestions,
   rejectTaskSuggestion,
   updateTaskSuggestion,
@@ -29,11 +28,20 @@ import { incompleteExtractionIssues } from '../components/research/researchDispl
 import { NoActiveProject } from '../components/project/NoActiveProject'
 import { useActiveProject } from '../project/ActiveProjectContext'
 import { meetingBelongsToProject } from '../project/projectSelection'
+import {
+  EXTRACTING_TASKS_MESSAGE,
+  NO_ACTIONABLE_TASKS_MESSAGE,
+  extractSavedMeetingTasks,
+  shouldExtractTasksAfterNotesSave,
+  taskExtractionFailureMessage,
+} from '../meetings/taskExtraction'
 
 type ExtractionTab = 'tasks' | 'research'
 
 export function MeetingDetails() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const arrival = (location.state ?? null) as { taskExtractionMessage?: string | null; taskExtractionError?: string | null } | null
   const { activeProjectId, activeProject, loading: projectsLoading, error: projectsError } = useActiveProject()
   const { meetingId: meetingIdParam } = useParams()
   const meetingId = Number(meetingIdParam)
@@ -68,8 +76,8 @@ export function MeetingDetails() {
   const [submittingReview, setSubmittingReview] = useState<ResearchReviewStatus | null>(null)
 
   // Action Banners
-  const [actionMessage, setActionMessage] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(arrival?.taskExtractionMessage ?? null)
+  const [actionError, setActionError] = useState<string | null>(arrival?.taskExtractionError ?? null)
 
   // Edit Meeting State
   const [isEditing, setIsEditing] = useState(false)
@@ -153,6 +161,7 @@ export function MeetingDetails() {
         setEditError('Select a project before editing a meeting.')
         return
       }
+      const previousNotes = meeting?.notes
       const updated = await updateMeeting(activeProjectId, meetingId, {
         title: editTitle.trim(),
         meetingDate: editDate,
@@ -160,7 +169,25 @@ export function MeetingDetails() {
       })
       setMeeting(updated)
       setIsEditing(false)
-      setActionMessage('Meeting notes updated successfully. You can now run AI task or research extraction below.')
+      if (shouldExtractTasksAfterNotesSave(previousNotes, updated.notes ?? editNotes)) {
+        setExtractingTasks(true)
+        setActionMessage(EXTRACTING_TASKS_MESSAGE)
+        try {
+          const result = await extractSavedMeetingTasks(activeProjectId, meetingId)
+          if (!result.skipped) {
+            setSuggestions(result.suggestions)
+            setSuggestionsError(null)
+            setActionMessage(result.message)
+          }
+        } catch (cause: unknown) {
+          setActionMessage('Meeting notes were saved.')
+          setActionError(taskExtractionFailureMessage(cause))
+        } finally {
+          setExtractingTasks(false)
+        }
+      } else {
+        setActionMessage('Meeting notes updated successfully.')
+      }
     } catch (cause: unknown) {
       setEditError(cause instanceof Error ? cause.message : 'Could not save meeting changes')
     } finally {
@@ -254,16 +281,20 @@ export function MeetingDetails() {
   }
 
   async function handleExtractTasks() {
+    if (activeProjectId == null || extractingTasks) return
     setExtractingTasks(true)
     setActionError(null)
-    setActionMessage(null)
+    setActionMessage(EXTRACTING_TASKS_MESSAGE)
     try {
-      if (activeProjectId == null) return
-      await extractTaskSuggestions(activeProjectId, meetingId)
-      await refreshSuggestions()
-      setActionMessage('Task suggestions updated from the meeting notes.')
+      const result = await extractSavedMeetingTasks(activeProjectId, meetingId)
+      if (!result.skipped) {
+        setSuggestions(result.suggestions)
+        setSuggestionsError(null)
+        setActionMessage(result.message)
+      }
     } catch (cause: unknown) {
-      setActionError(cause instanceof Error ? cause.message : 'Could not extract tasks')
+      setActionMessage(null)
+      setActionError(taskExtractionFailureMessage(cause))
     } finally {
       setExtractingTasks(false)
     }
@@ -284,6 +315,7 @@ export function MeetingDetails() {
     if (activeProjectId == null) return
     await acceptTaskSuggestion(activeProjectId, meetingId, suggestionId)
     await refreshSuggestions()
+    window.dispatchEvent(new Event('researchtrace-progress-changed'))
     setActionMessage('Suggestion accepted.')
   }
 
@@ -606,13 +638,13 @@ export function MeetingDetails() {
                 onClick={() => void handleExtractTasks()}
                 disabled={!meetingIdIsValid || extractingTasks || meetingLoading || meetingError != null}
               >
-                {extractingTasks ? 'Extracting…' : 'Extract Tasks with AI'}
+                {extractingTasks ? 'Extracting…' : 'Extract tasks again'}
               </button>
             </div>
 
             {suggestionsLoading ? <p className="mt-4 text-sm text-stone-600">Loading suggestions…</p> : null}
             {!suggestionsLoading && suggestionsError ? <Alert message={suggestionsError} /> : null}
-            {!suggestionsLoading && !suggestionsError && suggestions.length === 0 ? (
+            {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && actionMessage !== NO_ACTIONABLE_TASKS_MESSAGE ? (
               <p className="mt-4 text-sm text-stone-500">No task suggestions for this meeting.</p>
             ) : null}
             {!suggestionsLoading && !suggestionsError && suggestions.length > 0 ? (

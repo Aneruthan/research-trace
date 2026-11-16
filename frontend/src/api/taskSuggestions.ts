@@ -24,7 +24,9 @@ export async function extractTaskSuggestions(projectId: number, meetingId: numbe
     method: 'POST',
   })
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Could not extract tasks'))
+    const error = new Error(await readErrorMessage(response, 'Could not extract tasks')) as Error & { status?: number }
+    error.status = response.status
+    throw error
   }
   return parseJsonResponse<TaskSuggestion[]>(response)
 }

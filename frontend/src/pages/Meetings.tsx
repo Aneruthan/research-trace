@@ -14,6 +14,12 @@ import { PageHeader } from '../components/common/PageHeader'
 import { NoActiveProject } from '../components/project/NoActiveProject'
 import { useActiveProject } from '../project/ActiveProjectContext'
 import { isCurrentProjectResponse } from '../project/projectSelection'
+import {
+  EXTRACTING_TASKS_MESSAGE,
+  extractSavedMeetingTasks,
+  shouldExtractTasksAfterNotesSave,
+  taskExtractionFailureMessage,
+} from '../meetings/taskExtraction'
 
 export function Meetings() {
   const navigate = useNavigate()
@@ -106,18 +112,32 @@ export function Meetings() {
         setFormError('Select a project before creating a meeting.')
         return
       }
+      const savedNotes = notes.trim()
       const created = await createProjectMeeting(activeProjectId, {
         title: title.trim(),
         meetingDate,
-        notes: notes.trim() || undefined,
+        notes: savedNotes || undefined,
       })
       setShowAddForm(false)
       setTitle('')
       setNotes('')
-      setSuccessMessage(`Meeting "${created.title}" created successfully.`)
+      let taskExtractionMessage: string | null = null
+      let taskExtractionError: string | null = null
+      if (created.id != null && shouldExtractTasksAfterNotesSave('', created.notes ?? savedNotes)) {
+        setSuccessMessage(EXTRACTING_TASKS_MESSAGE)
+        try {
+          const result = await extractSavedMeetingTasks(activeProjectId, created.id)
+          if (!result.skipped) {
+            taskExtractionMessage = result.message
+          }
+        } catch (cause: unknown) {
+          taskExtractionError = taskExtractionFailureMessage(cause)
+        }
+      }
       if (created.id != null) {
-        navigate(`/meetings/${created.id}`)
+        navigate(`/meetings/${created.id}`, { state: { taskExtractionMessage, taskExtractionError } })
       } else {
+        setSuccessMessage(`Meeting "${created.title}" created successfully.`)
         loadMeetings(activeProjectId)
       }
     } catch (cause: unknown) {
@@ -156,11 +176,13 @@ export function Meetings() {
 
     setSavingEdit(true)
     setEditError(null)
+    setError(null)
     try {
       if (activeProjectId == null) {
         setEditError('Select a project before editing a meeting.')
         return
       }
+      const previousNotes = meetings.find((meeting) => meeting.id === editingMeetingId)?.notes
       const updated = await updateMeeting(activeProjectId, editingMeetingId, {
         title: editTitle.trim(),
         meetingDate: editDate,
@@ -170,7 +192,20 @@ export function Meetings() {
         prev.map((m) => (m.id === editingMeetingId ? { ...m, ...updated } : m)),
       )
       setEditingMeetingId(null)
-      setSuccessMessage(`Meeting "${updated.title}" updated successfully.`)
+      if (shouldExtractTasksAfterNotesSave(previousNotes, updated.notes ?? editNotes)) {
+        setSuccessMessage(EXTRACTING_TASKS_MESSAGE)
+        try {
+          const result = await extractSavedMeetingTasks(activeProjectId, updated.id ?? editingMeetingId)
+          if (!result.skipped) {
+            setSuccessMessage(result.message)
+          }
+        } catch (cause: unknown) {
+          setSuccessMessage('Meeting notes were saved.')
+          setError(taskExtractionFailureMessage(cause))
+        }
+      } else {
+        setSuccessMessage(`Meeting "${updated.title}" updated successfully.`)
+      }
     } catch (cause: unknown) {
       setEditError(cause instanceof Error ? cause.message : 'Could not update meeting')
     } finally {

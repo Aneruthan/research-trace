@@ -20,6 +20,7 @@ import com.researchtrace.backend.repository.TaskSuggestionRepository;
 import com.researchtrace.backend.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
@@ -29,6 +30,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 @DataJpaTest
@@ -95,11 +97,34 @@ class TaskSuggestionServiceIntegrationTest {
             .containsExactlyInAnyOrder(
                 tuple("Run Qwen baseline", TaskSuggestionStatus.ACCEPTED),
                 tuple("Prepare dataset statistics", TaskSuggestionStatus.REJECTED),
-                tuple("Run Qwen baseline", TaskSuggestionStatus.PENDING),
                 tuple("Prepare dataset statistics", TaskSuggestionStatus.PENDING),
                 tuple("Write related work", TaskSuggestionStatus.PENDING));
         assertThat(taskSuggestionRepository.findById(first.get(2).getId())).isEmpty();
         assertThat(taskRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void acceptingTheSameSuggestionTwiceDoesNotCreateASecondTask() {
+        student(PROJECT_ID, "Aneruthan");
+        Long meetingId = meeting(PROJECT_ID, "ACTION: Aneruthan | Run Qwen baseline | 2026-10-05");
+
+        TaskSuggestion suggestion = taskSuggestionService.extract(meetingId).get(0);
+        taskSuggestionService.accept(suggestion.getId(), null);
+        assertThat(taskRepository.count()).isEqualTo(1);
+
+        assertThatThrownBy(() -> taskSuggestionService.accept(suggestion.getId(), null))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void notesWithoutAnActionLineAreASuccessfulEmptyExtraction() {
+        student(PROJECT_ID, "Aneruthan");
+        Long meetingId = meeting(PROJECT_ID, "We discussed the literature and did not assign follow-up work.");
+
+        List<TaskSuggestion> suggestions = taskSuggestionService.extract(meetingId);
+
+        assertThat(suggestions).isEmpty();
+        assertThat(taskRepository.count()).isZero();
     }
 
     @Test
