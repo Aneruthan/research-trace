@@ -17,6 +17,7 @@ import com.researchtrace.backend.model.ResearchDecisionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.model.Result;
+import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.ExperimentRepository;
 import com.researchtrace.backend.repository.MeetingRepository;
 import com.researchtrace.backend.repository.ProjectRepository;
@@ -160,7 +161,7 @@ public class ResearchTraceService {
         ResearchEvent event = new ResearchEvent();
         event.setProjectId(projectId);
         event.setEventType(ResearchEventType.DECISION);
-        event.setTitle("Decision: " + saved.getTitle());
+        event.setTitle(TextLimits.title("Decision: " + saved.getTitle()));
         event.setDescription(saved.getRationale() != null ? saved.getRationale() : saved.getDecisionText());
         event.setOccurredAt(decidedAt.atStartOfDay());
         event.setCreatedAt(LocalDateTime.now());
@@ -210,7 +211,7 @@ public class ResearchTraceService {
         ResearchEvent changeEvent = new ResearchEvent();
         changeEvent.setProjectId(projectId);
         changeEvent.setEventType(ResearchEventType.CHANGE);
-        changeEvent.setTitle("Decision Superseded: " + savedNew.getTitle());
+        changeEvent.setTitle(TextLimits.title("Decision Superseded: " + savedNew.getTitle()));
         changeEvent.setDescription("Superseded \"" + oldDecision.getTitle() + "\". Rationale: " + savedNew.getRationale());
         changeEvent.setOccurredAt(decidedAt.atStartOfDay());
         changeEvent.setCreatedAt(LocalDateTime.now());
@@ -314,7 +315,7 @@ public class ResearchTraceService {
         ResearchEvent event = new ResearchEvent();
         event.setProjectId(projectId);
         event.setEventType(ResearchEventType.EXPERIMENT);
-        event.setTitle("Experiment: " + saved.getTitle());
+        event.setTitle(TextLimits.title("Experiment: " + saved.getTitle()));
         event.setDescription(saved.getHypothesis() != null ? saved.getHypothesis() : saved.getMethod());
         LocalDate date = saved.getStartedAt() != null ? saved.getStartedAt() : LocalDate.now();
         event.setOccurredAt(date.atStartOfDay());
@@ -327,6 +328,22 @@ public class ResearchTraceService {
         researchEventRepository.save(event);
 
         return saved;
+    }
+
+    @Transactional
+    public Experiment updateExperimentDecision(Long projectId, Long experimentId, Long researchDecisionId) {
+        Experiment experiment = getExperiment(projectId, experimentId);
+        if (researchDecisionId != null) {
+            ResearchDecision decision = researchDecisionRepository.findById(researchDecisionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Guiding decision not found: " + researchDecisionId));
+            if (!Objects.equals(decision.getProjectId(), projectId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Decision " + researchDecisionId + " belongs to a different project.");
+            }
+        }
+        experiment.setResearchDecisionId(researchDecisionId);
+        return experimentRepository.save(experiment);
     }
 
     // -------------------------------------------------------------------------
@@ -377,7 +394,7 @@ public class ResearchTraceService {
         ResearchEvent event = new ResearchEvent();
         event.setProjectId(projectId);
         event.setEventType(ResearchEventType.RESULT);
-        event.setTitle("Result: " + experiment.getTitle());
+        event.setTitle(TextLimits.title("Result: " + experiment.getTitle()));
         event.setDescription(saved.getSummary() + (saved.getDataOrMetric() != null ? " (" + saved.getDataOrMetric() + ")" : ""));
         event.setOccurredAt(observedAt.atStartOfDay());
         event.setCreatedAt(LocalDateTime.now());

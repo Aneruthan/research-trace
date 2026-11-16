@@ -10,6 +10,7 @@ const SELECTED_PROJECT_ID = 1
 export function Dashboard() {
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null)
   const [users, setUsers] = useState<User[]>([])
+  const [usersUnavailable, setUsersUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -20,12 +21,13 @@ export function Dashboard() {
     function load() {
       Promise.all([
         getProjectDashboard(SELECTED_PROJECT_ID, controller.signal),
-        getUsers(controller.signal).catch(() => [] as User[]),
+        getUsers(controller.signal).catch(() => null),
       ])
         .then(([data, loadedUsers]) => {
           if (active && !controller.signal.aborted) {
             setDashboard(data)
-            setUsers(loadedUsers)
+            setUsers(loadedUsers ?? [])
+            setUsersUnavailable(loadedUsers == null)
             setError(null)
           }
         })
@@ -65,6 +67,11 @@ export function Dashboard() {
       {!loading && error ? (
         <p className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
           {error}
+        </p>
+      ) : null}
+      {!loading && !error && dashboard && usersUnavailable ? (
+        <p className="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
+          Student names could not be loaded, so students and assignees are shown as unknown.
         </p>
       ) : null}
       {!loading && !error && dashboard ? <DashboardView dashboard={dashboard} users={users} /> : null}

@@ -19,6 +19,7 @@ import com.researchtrace.backend.research.ResearchTraceService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/research")
@@ -104,6 +106,27 @@ public class ResearchTraceController {
             @PathVariable Long projectId,
             @Valid @RequestBody ExperimentRequest request) {
         return researchTraceService.createExperiment(projectId, request);
+    }
+
+    @PutMapping("/experiments/{experimentId}")
+    public Experiment updateExperimentDecision(
+            @PathVariable Long projectId,
+            @PathVariable Long experimentId,
+            @RequestBody Map<String, Object> body) {
+        if (body == null || !body.containsKey("researchDecisionId")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "researchDecisionId is required and may be null to clear the link");
+        }
+        Object raw = body.get("researchDecisionId");
+        Long decisionId = null;
+        if (raw != null) {
+            if (!(raw instanceof Number number)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "researchDecisionId must be a number or null");
+            }
+            decisionId = number.longValue();
+        }
+        return researchTraceService.updateExperimentDecision(projectId, experimentId, decisionId);
     }
 
     @GetMapping("/experiments/{experimentId}")

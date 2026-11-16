@@ -17,7 +17,9 @@ import {
   type ResearchReviewStatus,
 } from '../api/research'
 import type { Meeting, SuggestionUpdate, TaskSuggestion } from '../api/types'
+import { getProjectMembers, getUsers } from '../api/users'
 import { PageHeader } from '../components/common/PageHeader'
+import type { StudentOption } from '../components/meetings/suggestionForm'
 import { SuggestionCard } from '../components/meetings/SuggestionCard'
 import { ExtractionSections } from '../components/research/ExtractionSections'
 
@@ -39,6 +41,8 @@ export function MeetingDetails() {
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
   const [suggestionsLoading, setSuggestionsLoading] = useState(true)
   const [extractingTasks, setExtractingTasks] = useState(false)
+  const [students, setStudents] = useState<StudentOption[]>([])
+  const [studentsUnavailable, setStudentsUnavailable] = useState(false)
 
   // Research Extraction State
   const [researchReviews, setResearchReviews] = useState<ExtractionReview[]>([])
@@ -58,6 +62,41 @@ export function MeetingDetails() {
   const [editNotes, setEditNotes] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (meeting?.projectId == null) {
+      return
+    }
+    const projectId = meeting.projectId
+    const controller = new AbortController()
+    Promise.all([
+      getProjectMembers(projectId, controller.signal),
+      getUsers(controller.signal),
+    ])
+      .then(([members, users]) => {
+        if (controller.signal.aborted) {
+          return
+        }
+        const names = new Map(users.filter((user) => user.id != null).map((user) => [user.id, user.name]))
+        setStudents(
+          members
+            .filter((member) => member.role === 'STUDENT' && member.userId != null)
+            .map((member) => ({
+              id: member.userId as number,
+              name: names.get(member.userId) ?? '',
+            })),
+        )
+        setStudentsUnavailable(false)
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || (cause instanceof Error && cause.name === 'AbortError')) {
+          return
+        }
+        setStudents([])
+        setStudentsUnavailable(true)
+      })
+    return () => controller.abort()
+  }, [meeting?.projectId])
 
   function startEditing() {
     if (!meeting) return
@@ -453,6 +492,8 @@ export function MeetingDetails() {
                   <SuggestionCard
                     key={suggestion.id ?? suggestion.title}
                     suggestion={suggestion}
+                    students={students}
+                    studentsUnavailable={studentsUnavailable}
                     onSave={handleSaveTask}
                     onAccept={handleAcceptTask}
                     onReject={handleRejectTask}

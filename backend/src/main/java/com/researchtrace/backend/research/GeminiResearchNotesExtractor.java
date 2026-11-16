@@ -2,6 +2,8 @@ package com.researchtrace.backend.research;
 
 import com.researchtrace.backend.dto.research.MeetingExtractionResponse;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 public class GeminiResearchNotesExtractor implements ResearchNotesExtractor {
 
@@ -21,6 +23,9 @@ public class GeminiResearchNotesExtractor implements ResearchNotesExtractor {
 
             Only extract information that is supported by the meeting notes.
             Do not invent information.
+            For an experiment, set method only when the notes explicitly describe how it will be carried out.
+            For a result, set comparison only when the notes explicitly compare it with another result or baseline.
+            For a decision, set madeBy only when the notes explicitly name who made it.
 
             For every extracted item, provide a confidence value between 0 and 1.
 
@@ -35,6 +40,22 @@ public class GeminiResearchNotesExtractor implements ResearchNotesExtractor {
 
     @Override
     public MeetingExtractionResponse extract(String meetingNotes) {
+        ResearchExtractionChecks.requireNotes(meetingNotes);
+        MeetingExtractionResponse response;
+        try {
+            response = callModel(meetingNotes);
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Gemini research extraction failed");
+        }
+        ResearchExtractionChecks.validateModelResponse(response);
+        return response;
+    }
+
+    MeetingExtractionResponse callModel(String meetingNotes) {
         return chatClient.prompt()
             .system(SYSTEM_PROMPT)
             .user(meetingNotes)

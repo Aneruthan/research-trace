@@ -18,6 +18,7 @@ const SELECTED_PROJECT_ID = 1
 export function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [usersUnavailable, setUsersUnavailable] = useState(false)
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [decisions, setDecisions] = useState<ResearchDecision[]>([])
@@ -38,7 +39,7 @@ export function Tasks() {
       loadedExperiments,
     ] = await Promise.all([
       getProjectTasks(SELECTED_PROJECT_ID, signal),
-      getUsers(signal).catch(() => [] as User[]),
+      getUsers(signal).catch(() => null),
       getProjectProgress(SELECTED_PROJECT_ID, signal).catch(() => null),
       getProjectMilestones(SELECTED_PROJECT_ID, signal).catch(() => [] as Milestone[]),
       getProjectMeetings(SELECTED_PROJECT_ID, signal).catch(() => [] as Meeting[]),
@@ -49,7 +50,8 @@ export function Tasks() {
       return
     }
     setTasks(loadedTasks)
-    setUsers(loadedUsers)
+    setUsers(loadedUsers ?? [])
+    setUsersUnavailable(loadedUsers == null)
     setProjectProgress(progress)
     setMilestones(loadedMilestones)
     setMeetings(loadedMeetings)
@@ -139,6 +141,7 @@ export function Tasks() {
           Project progress from the backend: {projectProgress.toFixed(2)}%
         </p>
       ) : null}
+      {!loading && usersUnavailable ? <UsersUnavailableNotice /> : null}
       {!loading && error ? <Alert message={error} /> : null}
       {!loading && !error && validTasks.length === 0 ? (
         <p className="mt-6 text-sm text-stone-500">No tasks for this project.</p>
@@ -231,6 +234,14 @@ export function Tasks() {
         </ul>
       ) : null}
     </section>
+  )
+}
+
+function UsersUnavailableNotice() {
+  return (
+    <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
+      Student names could not be loaded, so assignees are shown as “Unknown assignee”.
+    </p>
   )
 }
 

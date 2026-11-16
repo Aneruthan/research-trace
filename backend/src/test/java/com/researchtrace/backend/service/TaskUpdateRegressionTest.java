@@ -197,7 +197,7 @@ class TaskUpdateRegressionTest {
     }
 
     @Test
-    @DisplayName("Milestone status: 0% -> NOT_STARTED, 50% -> IN_PROGRESS, 100% -> COMPLETED, 0 tasks -> preserved")
+    @DisplayName("Milestone status follows task progress and preserves Blocked, Deferred, and empty milestones")
     void milestoneStatusReflectsCalculatedProgress() {
         Milestone milestone = new Milestone();
         milestone.setId(MILESTONE_ID);
@@ -224,12 +224,21 @@ class TaskUpdateRegressionTest {
         taskService.syncMilestoneStatus(MILESTONE_ID);
         assertThat(milestone.getStatus()).isEqualTo(MilestoneStatus.NOT_STARTED);
 
-        // Case 4: 0 associated tasks -> preserve existing status
+        // Case 4: Blocked and Deferred stay put before task progress is consulted
         milestone.setStatus(MilestoneStatus.BLOCKED);
+        taskService.syncMilestoneStatus(MILESTONE_ID);
+        assertThat(milestone.getStatus()).isEqualTo(MilestoneStatus.BLOCKED);
+
+        milestone.setStatus(MilestoneStatus.DEFERRED);
+        taskService.syncMilestoneStatus(MILESTONE_ID);
+        assertThat(milestone.getStatus()).isEqualTo(MilestoneStatus.DEFERRED);
+
+        // Case 5: an empty task list keeps a status that is not Blocked or Deferred
+        milestone.setStatus(MilestoneStatus.IN_PROGRESS);
         when(taskRepository.findByMilestoneId(MILESTONE_ID)).thenReturn(List.of());
 
         taskService.syncMilestoneStatus(MILESTONE_ID);
-        assertThat(milestone.getStatus()).isEqualTo(MilestoneStatus.BLOCKED);
+        assertThat(milestone.getStatus()).isEqualTo(MilestoneStatus.IN_PROGRESS);
     }
 
     @Test

@@ -13,6 +13,7 @@ import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.model.ResearchReviewClaim;
 import com.researchtrace.backend.model.Result;
+import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.ExperimentRepository;
 import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import com.researchtrace.backend.repository.ResearchEventRepository;
@@ -83,7 +84,7 @@ public class AcceptedReviewRecorder {
                 decision.setMeetingId(review.getMeetingId());
             }
             decision.setExtractionReviewId(review.getId());
-            decision.setTitle(title);
+            decision.setTitle(TextLimits.title(title));
             decision.setDecisionText(blankToNull(extracted.getDescription()));
             decision.setRationale(blankToNull(extracted.getReason()));
             decision.setStatus(ResearchDecisionStatus.ACTIVE);
@@ -111,8 +112,9 @@ public class AcceptedReviewRecorder {
             if (review.getMeetingId() != null) {
                 experiment.setMeetingId(review.getMeetingId());
             }
-            experiment.setTitle(title);
+            experiment.setTitle(TextLimits.title(title));
             experiment.setHypothesis(blankToNull(extracted.getObjective()));
+            experiment.setMethod(blankToNull(extracted.getMethod()));
             experiment.setStatus(ExperimentStatus.PLANNED);
             experiment.setSourceReference(sourceReference);
             Experiment saved = experimentRepository.save(experiment);
@@ -147,6 +149,7 @@ public class AcceptedReviewRecorder {
             result.setExperimentId(experimentId);
             result.setSummary(summary);
             result.setDataOrMetric(blankToNull(extracted.getMetrics()));
+            result.setComparison(blankToNull(extracted.getComparison()));
             result.setObservedAt(review.getCreatedAt());
             result.setSourceReference(sourceReference);
             Result saved = resultRepository.save(result);
@@ -170,7 +173,7 @@ public class AcceptedReviewRecorder {
         event.setProjectId(projectId);
         event.setEventType(eventType);
         event.setOccurredAt(review.getCreatedAt());
-        event.setTitle(title);
+        event.setTitle(TextLimits.title(title));
         event.setDescription(description);
         event.setMeetingId(review.getMeetingId());
         event.setResearchDecisionId(decisionId == null ? researchDecisionId : decisionId);

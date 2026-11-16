@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { Experiment, ResearchDecision, ResearchEvent, Result } from '../../api/research'
+import { formatDateOrTimestamp } from '../common/dates'
 
 type PersistedResearchProps = {
   projectId: number
@@ -9,6 +10,8 @@ type PersistedResearchProps = {
   experiments: Experiment[]
   results: Result[]
   events: ResearchEvent[]
+  onCreateExperiment?: (title: string, decisionId: number | null) => Promise<void>
+  onLinkExperiment?: (experimentId: number, decisionId: number | null) => Promise<void>
 }
 
 export function PersistedResearch({
@@ -19,14 +22,16 @@ export function PersistedResearch({
   experiments,
   results,
   events,
+  onCreateExperiment,
+  onLinkExperiment,
 }: PersistedResearchProps) {
   return (
     <section className="mt-8">
       <h2 className="text-sm font-semibold text-stone-950">Persisted research records</h2>
       <p className="mt-2 text-sm text-stone-600">
         These lists are stored records for project {projectId}. A review status is separate: only an accepted review
-        creates them, and only for extraction fields the backend can store. Pending, rejected, and edited reviews stay
-        in review history.
+        creates them, and only for extraction fields the backend can store. Pending, rejected, and edited reviews add
+        no decisions, experiments, or results; an edited review can still flag direction changes.
       </p>
       {loading ? <p className="mt-4 text-sm text-stone-600">Loading persisted research records…</p> : null}
       {!loading && error ? (
@@ -48,7 +53,7 @@ export function PersistedResearch({
                 </div>
                 <Field label="Text" value={decision.decisionText} />
                 <Field label="Rationale" value={decision.rationale} />
-                <Field label="Decided" value={formatTimestamp(decision.decidedAt)} />
+                <Field label="Decided" value={formatDateOrTimestamp(decision.decidedAt)} />
                 {decision.supersedesDecisionId != null ? (
                   <Field label="Supersedes" value={String(decision.supersedesDecisionId)} />
                 ) : null}
@@ -61,9 +66,10 @@ export function PersistedResearch({
             ))}
           </RecordGroup>
 
+          {onCreateExperiment ? <CreateExperimentForm decisions={decisions} onCreate={onCreateExperiment} /> : null}
           <RecordGroup
             title="Persisted experiments"
-            empty="No persisted experiments for this project. An accepted review stores an experiment when it has a title."
+            empty="No persisted experiments for this project. An accepted review stores an experiment when it has a title. Linking a decision is optional and is never guessed from the meeting notes."
           >
             {experiments.map((experiment) => (
               <li key={experiment.id ?? experiment.title} className="px-4 py-4">
@@ -73,10 +79,16 @@ export function PersistedResearch({
                 </div>
                 <Field label="Hypothesis" value={experiment.hypothesis} />
                 <Field label="Method" value={experiment.method} />
-                <Field label="Started" value={formatTimestamp(experiment.startedAt)} />
-                <Field label="Completed" value={formatTimestamp(experiment.completedAt)} />
-                {experiment.researchDecisionId != null ? (
-                  <Field label="Decision" value={String(experiment.researchDecisionId)} />
+                <Field label="Started" value={formatDateOrTimestamp(experiment.startedAt)} />
+                <Field label="Completed" value={formatDateOrTimestamp(experiment.completedAt)} />
+                <Field label="Decision" value={decisionTitle(decisions, experiment.researchDecisionId)} />
+                {onLinkExperiment && experiment.id != null ? (
+                  <ExperimentDecisionEditor
+                    experimentId={experiment.id}
+                    decisionId={experiment.researchDecisionId}
+                    decisions={decisions}
+                    onLink={onLinkExperiment}
+                  />
                 ) : null}
                 <Provenance sourceReference={experiment.sourceReference} />
               </li>
@@ -91,7 +103,7 @@ export function PersistedResearch({
               <li key={result.id ?? result.summary} className="px-4 py-4">
                 <p className="text-sm font-medium text-stone-950">{result.summary ?? 'No summary'}</p>
                 <Field label="Metrics" value={result.dataOrMetric} />
-                <Field label="Observed" value={formatTimestamp(result.observedAt)} />
+                <Field label="Observed" value={formatDateOrTimestamp(result.observedAt)} />
                 {result.experimentId != null ? (
                   <Field label="Experiment" value={String(result.experimentId)} />
                 ) : null}
@@ -111,7 +123,7 @@ export function PersistedResearch({
                   <p className="text-xs font-medium tracking-wide text-stone-500">{event.eventType ?? 'No type'}</p>
                 </div>
                 <Field label="Description" value={event.description} />
-                <Field label="Occurred" value={formatTimestamp(event.occurredAt)} />
+                <Field label="Occurred" value={formatDateOrTimestamp(event.occurredAt)} />
                 <Field label="Source" value={event.sourceReference} />
                 {event.taskId != null && <Field label="Task" value={`#${event.taskId}`} />}
                 {event.researchDecisionId != null && <Field label="Decision" value={`#${event.researchDecisionId}`} />}
@@ -122,6 +134,148 @@ export function PersistedResearch({
         </div>
       ) : null}
     </section>
+  )
+}
+
+function decisionTitle(decisions: ResearchDecision[], decisionId: number | null): string | null {
+  if (decisionId == null) {
+    return null
+  }
+  return decisions.find((decision) => decision.id === decisionId)?.title ?? 'Unknown decision'
+}
+
+function CreateExperimentForm({
+  decisions,
+  onCreate,
+}: {
+  decisions: ResearchDecision[]
+  onCreate: (title: string, decisionId: number | null) => Promise<void>
+}) {
+  const [title, setTitle] = useState('')
+  const [decisionId, setDecisionId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (title.trim() === '') {
+      setError('Experiment title is required')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onCreate(title.trim(), decisionId === '' ? null : Number(decisionId))
+      setTitle('')
+      setDecisionId('')
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : 'Could not create experiment')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="rounded-lg border border-stone-200 bg-white p-4" onSubmit={(event) => void submit(event)}>
+      <h3 className="text-sm font-semibold text-stone-950">Add experiment</h3>
+      <p className="mt-1 text-xs text-stone-600">
+        The decision link is optional. Existing experiments stay unlinked until you choose one.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-medium text-stone-600">
+          Title
+          <input
+            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-900"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </label>
+        <DecisionSelect decisions={decisions} value={decisionId} onChange={setDecisionId} />
+      </div>
+      {error ? <p className="mt-2 text-xs text-red-800">{error}</p> : null}
+      <button
+        type="submit"
+        className="mt-3 rounded-md bg-stone-950 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+        disabled={saving}
+      >
+        {saving ? 'Saving…' : 'Add experiment'}
+      </button>
+    </form>
+  )
+}
+
+function ExperimentDecisionEditor({
+  experimentId,
+  decisionId,
+  decisions,
+  onLink,
+}: {
+  experimentId: number
+  decisionId: number | null
+  decisions: ResearchDecision[]
+  onLink: (experimentId: number, decisionId: number | null) => Promise<void>
+}) {
+  const [selected, setSelected] = useState(decisionId?.toString() ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      await onLink(experimentId, selected === '' ? null : Number(selected))
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : 'Could not update the decision link')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <DecisionSelect decisions={decisions} value={selected} onChange={setSelected} />
+        <button
+          type="button"
+          className="rounded-md border border-stone-300 px-3 py-2 text-xs font-medium text-stone-800 disabled:opacity-60"
+          onClick={() => void save()}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Save decision link'}
+        </button>
+      </div>
+      {error ? <p className="mt-1 text-xs text-red-800">{error}</p> : null}
+    </div>
+  )
+}
+
+function DecisionSelect({
+  decisions,
+  value,
+  onChange,
+}: {
+  decisions: ResearchDecision[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="block text-xs font-medium text-stone-600">
+      Linked decision (optional)
+      <select
+        className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">No linked decision</option>
+        {decisions
+          .filter((decision) => decision.id != null)
+          .map((decision) => (
+            <option key={decision.id} value={decision.id ?? ''}>
+              {decision.title ?? 'Untitled decision'}
+            </option>
+          ))}
+      </select>
+    </label>
   )
 }
 
@@ -177,15 +331,4 @@ function Provenance({
       {extractionReviewId != null ? <Field label="Review" value={String(extractionReviewId)} /> : null}
     </>
   )
-}
-
-function formatTimestamp(value: string | null): string | null {
-  if (value == null || value.trim() === '') {
-    return null
-  }
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return value
-  }
-  return parsed.toLocaleString()
 }

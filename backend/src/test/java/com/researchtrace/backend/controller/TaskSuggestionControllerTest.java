@@ -1,12 +1,14 @@
 package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.dto.AcceptTaskSuggestionRequest;
+import com.researchtrace.backend.dto.AcceptTaskSuggestionRequest.ReviewedField;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.model.TaskSuggestion;
 import com.researchtrace.backend.model.TaskSuggestionStatus;
 import com.researchtrace.backend.service.TaskSuggestionService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
@@ -24,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -107,6 +110,33 @@ class TaskSuggestionControllerTest {
             8L,
             12L,
             LocalDate.of(2026, 10, 10)));
+    }
+
+    @Test
+    void explicitNullClearsAssigneeWhileAnOmittedAssigneeDoesNot() throws Exception {
+        when(taskSuggestionService.update(eq(40L), any())).thenReturn(suggestion(40L, TaskSuggestionStatus.PENDING));
+
+        mockMvc.perform(put("/api/task-suggestions/40")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"assigneeId\": null}"))
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<AcceptTaskSuggestionRequest> cleared = ArgumentCaptor.forClass(AcceptTaskSuggestionRequest.class);
+        verify(taskSuggestionService).update(eq(40L), cleared.capture());
+        assertThat(cleared.getValue().has(ReviewedField.ASSIGNEE_ID)).isTrue();
+        assertThat(cleared.getValue().assigneeId()).isNull();
+        assertThat(cleared.getValue().has(ReviewedField.TITLE)).isFalse();
+
+        mockMvc.perform(put("/api/task-suggestions/40")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\": \"Keep assignee\"}"))
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<AcceptTaskSuggestionRequest> omitted = ArgumentCaptor.forClass(AcceptTaskSuggestionRequest.class);
+        verify(taskSuggestionService, org.mockito.Mockito.times(2)).update(eq(40L), omitted.capture());
+        AcceptTaskSuggestionRequest second = omitted.getAllValues().get(1);
+        assertThat(second.has(ReviewedField.TITLE)).isTrue();
+        assertThat(second.has(ReviewedField.ASSIGNEE_ID)).isFalse();
     }
 
     @Test

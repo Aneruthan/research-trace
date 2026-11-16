@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
@@ -18,12 +19,18 @@ public class TaskExtractorConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "task-extractor.mode", havingValue = "gemini", matchIfMissing = true)
+    @Conditional(GeminiModeConditions.TaskGemini.class)
     public TaskExtractor geminiTaskExtractor(
             ChatClient.Builder chatClientBuilder,
             @Value("${spring.ai.google.genai.api-key:}") String apiKey) {
         GeminiConfigurationValidator.validateApiKey(apiKey, "task-extractor.mode");
         return new GeminiTaskExtractor(chatClientBuilder.build());
+    }
+
+    @Bean
+    @Conditional(GeminiModeConditions.TaskUnconfigured.class)
+    public TaskExtractor unconfiguredTaskExtractor() {
+        return new UnconfiguredTaskExtractor();
     }
 
     @Bean

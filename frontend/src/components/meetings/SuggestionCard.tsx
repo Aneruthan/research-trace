@@ -1,8 +1,12 @@
 import { useState } from 'react'
-import type { SuggestionUpdate, TaskSuggestion } from '../../api/types'
+import type { SuggestionUpdate, TaskSuggestion, User } from '../../api/types'
+import { assigneeLabel } from '../../api/users'
+import { assigneeChoices, type StudentOption } from './suggestionForm'
 
 type SuggestionCardProps = {
   suggestion: TaskSuggestion
+  students: StudentOption[]
+  studentsUnavailable: boolean
   onSave: (suggestionId: number, update: SuggestionUpdate) => Promise<void>
   onAccept: (suggestionId: number) => Promise<void>
   onReject: (suggestionId: number) => Promise<void>
@@ -11,6 +15,8 @@ type SuggestionCardProps = {
 
 export function SuggestionCard({
   suggestion,
+  students,
+  studentsUnavailable,
   onSave,
   onAccept,
   onReject,
@@ -64,8 +70,12 @@ export function SuggestionCard({
     if (suggestionId == null) {
       return
     }
+    if (title.trim() === '') {
+      onError('Title is required')
+      return
+    }
     const update: SuggestionUpdate = {
-      title: title.trim() === '' ? null : title.trim(),
+      title: title.trim(),
       description: description.trim() === '' ? null : description.trim(),
       assigneeId: parseOptionalId(assigneeId),
       milestoneId: parseOptionalId(milestoneId),
@@ -75,6 +85,14 @@ export function SuggestionCard({
     }
     void run(() => onSave(suggestionId, update))
   }
+
+  const studentUsers: User[] = students.map((student) => ({
+    id: student.id,
+    name: student.name,
+    email: null,
+    role: 'STUDENT',
+  }))
+  const assigneeText = assigneeLabel(suggestion.assigneeId, studentUsers, suggestion.assigneeName)
 
   return (
     <li className="rounded-lg border border-stone-200 bg-white p-5">
@@ -89,7 +107,25 @@ export function SuggestionCard({
           <Field label="Title" value={title} onChange={setTitle} />
           <Field label="Description" value={description} onChange={setDescription} />
           <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Assignee id" value={assigneeId} onChange={setAssigneeId} />
+            <label className="block text-xs font-medium text-stone-600">
+              Assignee
+              <select
+                className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                value={assigneeId}
+                onChange={(event) => setAssigneeId(event.target.value)}
+              >
+                {assigneeChoices(students, parseOptionalId(assigneeId)).map((choice) => (
+                  <option key={choice.value === '' ? 'unassigned' : choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+              </select>
+              {studentsUnavailable ? (
+                <span className="mt-1 block text-xs font-normal text-amber-800">
+                  Student names could not be loaded. The current assignee is kept until you choose Unassigned or a name.
+                </span>
+              ) : null}
+            </label>
             <Field label="Milestone id" value={milestoneId} onChange={setMilestoneId} />
             <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
           </div>
@@ -143,8 +179,7 @@ export function SuggestionCard({
           <dl className="mt-3 grid gap-2 text-xs text-stone-600 sm:grid-cols-2">
             <div>
               <span className="font-medium text-stone-500">Assignee: </span>
-              {suggestion.assigneeName ?? '—'}
-              {suggestion.assigneeId != null ? ` (ID: ${suggestion.assigneeId})` : ''}
+              {assigneeText}
             </div>
             <div>
               <span className="font-medium text-stone-500">Milestone ID: </span>

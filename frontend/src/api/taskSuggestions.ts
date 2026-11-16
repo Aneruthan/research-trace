@@ -1,4 +1,4 @@
-import { API_BASE_URL, parseJsonResponse } from './config.ts'
+import { API_BASE_URL, parseJsonResponse, readErrorMessage } from './config.ts'
 import type { SuggestionUpdate, TaskSuggestion } from './types.ts'
 
 export async function getTaskSuggestions(
@@ -9,7 +9,7 @@ export async function getTaskSuggestions(
     signal,
   })
   if (!response.ok) {
-    throw new Error(`Could not load task suggestions (${response.status})`)
+    throw new Error(await readErrorMessage(response, 'Could not load task suggestions'))
   }
   return parseJsonResponse<TaskSuggestion[]>(response)
 }
@@ -19,7 +19,7 @@ export async function extractTaskSuggestions(meetingId: number): Promise<TaskSug
     method: 'POST',
   })
   if (!response.ok) {
-    throw new Error(`Could not extract tasks (${response.status})`)
+    throw new Error(await readErrorMessage(response, 'Could not extract tasks'))
   }
   return parseJsonResponse<TaskSuggestion[]>(response)
 }
@@ -34,7 +34,7 @@ export async function updateTaskSuggestion(
     body: JSON.stringify(update),
   })
   if (!response.ok) {
-    throw new Error(`Could not update suggestion (${response.status})`)
+    throw new Error(await readErrorMessage(response, 'Could not update suggestion'))
   }
   return parseJsonResponse<TaskSuggestion>(response)
 }
@@ -44,7 +44,7 @@ export async function acceptTaskSuggestion(suggestionId: number): Promise<void> 
     method: 'POST',
   })
   if (!response.ok) {
-    throw new Error(`Could not accept suggestion (${response.status})`)
+    throw new Error(await readErrorMessage(response, 'Could not accept suggestion'))
   }
 }
 
@@ -53,6 +53,6 @@ export async function rejectTaskSuggestion(suggestionId: number): Promise<void> 
     method: 'POST',
   })
   if (!response.ok) {
-    throw new Error(`Could not reject suggestion (${response.status})`)
+    throw new Error(await readErrorMessage(response, 'Could not reject suggestion'))
   }
 }

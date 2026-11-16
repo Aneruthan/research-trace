@@ -107,7 +107,7 @@ export function Milestones() {
     <section>
       <PageHeader
         title="Milestones"
-        description="Milestone weights and progress derived from completed tasks."
+        description="Progress is calculated from tasks. Milestone weight is kept for reference and does not change progress."
       />
       {loading ? <p className="mt-6 text-sm text-stone-600">Loading milestones for project {SELECTED_PROJECT_ID}…</p> : null}
       {!loading && message ? (
@@ -149,7 +149,7 @@ export function Milestones() {
                 </div>
               </div>
               <p className="mt-1 text-xs text-stone-500">
-                Weight {milestone.weight ?? 'none'}
+                Weight {milestone.weight ?? 'none'} (not used in progress)
                 {' · '}
                 Progress {progress == null ? 'unavailable' : `${progress.toFixed(2)}%`}
                 {milestone.dueDate ? ` · Due ${milestone.dueDate}` : ''}
@@ -171,7 +171,7 @@ export function Milestones() {
                     />
                   </label>
                   <label className="block text-xs font-medium text-stone-600">
-                    Weight
+                    Weight (not used in progress)
                     <input
                       className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-900"
                       type="number"

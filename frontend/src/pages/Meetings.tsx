@@ -7,6 +7,7 @@ import {
   updateMeeting,
 } from '../api/meetings'
 import type { Meeting } from '../api/types'
+import { localIsoDate } from '../components/common/dates'
 import { PageHeader } from '../components/common/PageHeader'
 
 const SELECTED_PROJECT_ID = 1
@@ -21,7 +22,7 @@ export function Meetings() {
   // Add Meeting Form State
   const [showAddForm, setShowAddForm] = useState(false)
   const [title, setTitle] = useState('')
-  const [meetingDate, setMeetingDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [meetingDate, setMeetingDate] = useState(() => localIsoDate())
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)

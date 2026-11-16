@@ -225,4 +225,36 @@ class MeetingServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
+
+    @Test
+    void createMeeting_rejectsATitleLongerThan255BeforeSaving() {
+        when(projectRepository.existsById(1L)).thenReturn(true);
+        Meeting input = new Meeting();
+        input.setTitle("m".repeat(256));
+        input.setMeetingDate(LocalDate.of(2026, 11, 8));
+
+        assertThatThrownBy(() -> meetingService.createMeeting(1L, input))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> {
+                assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                assertThat(ex.getMessage()).contains("at most 255 characters");
+            });
+        verify(meetingRepository, never()).save(any());
+    }
+
+    @Test
+    void updateMeeting_rejectsATitleLongerThan255BeforeSaving() {
+        Meeting existing = new Meeting();
+        existing.setId(5L);
+        existing.setProjectId(1L);
+        existing.setTitle("Weekly Sync");
+        when(meetingRepository.findById(5L)).thenReturn(Optional.of(existing));
+        Meeting update = new Meeting();
+        update.setTitle("m".repeat(256));
+
+        assertThatThrownBy(() -> meetingService.updateMeeting(5L, update))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("at most 255 characters");
+        verify(meetingRepository, never()).save(any());
+    }
 }

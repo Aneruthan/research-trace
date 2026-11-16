@@ -1,5 +1,6 @@
 package com.researchtrace.backend;
 
+import com.researchtrace.backend.ai.MissingGeminiKeyContextInitializer;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -16,7 +17,9 @@ public class BackendApplication {
 
     public static void main(String[] args) {
         loadDotEnv();
-        SpringApplication.run(BackendApplication.class, args);
+        SpringApplication application = new SpringApplication(BackendApplication.class);
+        application.addInitializers(new MissingGeminiKeyContextInitializer());
+        application.run(args);
     }
 
     /**

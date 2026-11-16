@@ -10,6 +10,7 @@ import com.researchtrace.backend.model.ResearchDecision;
 import com.researchtrace.backend.model.ResearchDecisionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
+import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.MeetingRepository;
 import com.researchtrace.backend.repository.ProjectRepository;
 import com.researchtrace.backend.repository.ResearchChangeRepository;
@@ -67,7 +68,8 @@ public class ChangeDetectionService {
             return flaggedChanges;
         }
 
-        List<ResearchChange> existingChanges = researchChangeRepository.findByProjectIdOrderByDetectedAtDesc(projectId);
+        List<ResearchChange> existingChanges =
+            new ArrayList<>(researchChangeRepository.findByProjectIdOrderByDetectedAtDesc(projectId));
 
         // 1. Ingest extracted research changes explicitly detected by AI
         if (extraction.getResearchChanges() != null) {
@@ -86,7 +88,8 @@ public class ChangeDetectionService {
                     change.setProjectId(projectId);
                     change.setMeetingId(meetingId);
                     change.setChangeType(determineChangeType(changeDto.getPreviousApproach(), changeDto.getNewApproach()));
-                    change.setTitle(changeDto.getDescription() != null ? changeDto.getDescription() : "Detected Research Change");
+                    change.setTitle(TextLimits.title(
+                        changeDto.getDescription() != null ? changeDto.getDescription() : "Detected Research Change"));
                     change.setPreviousApproach(changeDto.getPreviousApproach());
                     change.setNewApproach(changeDto.getNewApproach());
                     change.setReason(changeDto.getReason());
@@ -97,12 +100,13 @@ public class ChangeDetectionService {
 
                     ResearchChange saved = researchChangeRepository.save(change);
                     flaggedChanges.add(saved);
+                    existingChanges.add(saved);
 
                     // Publish to chronological trace
                     ResearchEvent event = new ResearchEvent();
                     event.setProjectId(projectId);
                     event.setEventType(ResearchEventType.CHANGE);
-                    event.setTitle("Flagged Change: " + saved.getTitle());
+                    event.setTitle(TextLimits.title("Flagged Change: " + saved.getTitle()));
                     event.setDescription("Shift from [" + saved.getPreviousApproach() + "] to [" + saved.getNewApproach() + "]. Reason: " + saved.getReason());
                     event.setOccurredAt(LocalDateTime.now());
                     event.setCreatedAt(LocalDateTime.now());
@@ -114,20 +118,24 @@ public class ChangeDetectionService {
             }
         }
 
-        // 2. Cross-meeting comparison against existing active decisions in this project
+        // 2. Cross-meeting comparison against existing active decisions in this project.
+        // Decisions from this meeting (including ones just stored for this review) are not a previous approach.
         List<ResearchDecision> activeDecisions = researchDecisionRepository
-            .findByProjectIdAndStatusOrderByCreatedAtDesc(projectId, ResearchDecisionStatus.ACTIVE);
+            .findByProjectIdAndStatusOrderByCreatedAtDesc(projectId, ResearchDecisionStatus.ACTIVE)
+            .stream()
+            .filter(decision -> meetingId == null || !meetingId.equals(decision.getMeetingId()))
+            .toList();
 
         if (extraction.getDecisions() != null && !activeDecisions.isEmpty()) {
             for (ExtractedDecision candidate : extraction.getDecisions()) {
                 String candidateTitle = candidate.getTitle() != null ? candidate.getTitle().toLowerCase() : "";
-                String candidateDesc = candidate.getDescription() != null ? candidate.getDescription().toLowerCase() : "";
+                String flagTitle = TextLimits.title("Potential Direction Shift: " + candidate.getTitle());
 
                 for (ResearchDecision active : activeDecisions) {
                     // Check if candidate suggests a pivot from an active decision (e.g. PMC-VQA -> LitMedImage)
                     if (candidateTitle.contains("switch") || candidateTitle.contains("pivot") || candidateTitle.contains("instead of")) {
                         boolean alreadyFlagged = existingChanges.stream().anyMatch(e ->
-                            isSimilar(e.getTitle(), candidate.getTitle())
+                            isSimilar(e.getTitle(), flagTitle)
                         );
 
                         if (!alreadyFlagged && !active.getTitle().equalsIgnoreCase(candidate.getTitle())) {
@@ -135,7 +143,7 @@ public class ChangeDetectionService {
                             change.setProjectId(projectId);
                             change.setMeetingId(meetingId);
                             change.setChangeType("DIRECTION");
-                            change.setTitle("Potential Direction Shift: " + candidate.getTitle());
+                            change.setTitle(flagTitle);
                             change.setPreviousApproach(active.getTitle());
                             change.setNewApproach(candidate.getTitle());
                             change.setReason(candidate.getReason() != null ? candidate.getReason() : candidate.getDescription());
@@ -146,6 +154,7 @@ public class ChangeDetectionService {
 
                             ResearchChange saved = researchChangeRepository.save(change);
                             flaggedChanges.add(saved);
+                            existingChanges.add(saved);
                             break;
                         }
                     }

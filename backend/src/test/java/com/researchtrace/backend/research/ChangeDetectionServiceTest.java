@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -162,6 +163,79 @@ class ChangeDetectionServiceTest {
     }
 
     @Test
+    void doesNotRepeatADirectionShiftThatWasAlreadyFlagged() {
+        stubMeeting();
+        when(researchDecisionRepository.findByProjectIdAndStatusOrderByCreatedAtDesc(PROJECT_ID, ResearchDecisionStatus.ACTIVE))
+            .thenReturn(List.of(activeDecision(100L, "Use PMC-VQA for primary evaluation", 5L)));
+        ResearchChange existing = new ResearchChange();
+        existing.setProjectId(PROJECT_ID);
+        existing.setTitle("Potential Direction Shift: Switch to LitMedImage dataset");
+        when(researchChangeRepository.findByProjectIdOrderByDetectedAtDesc(PROJECT_ID)).thenReturn(List.of(existing));
+
+        List<ResearchChange> flagged = changeDetectionService.detectAndFlagChanges(
+            PROJECT_ID, MEETING_ID, extractionWithDecision("Switch to LitMedImage dataset"));
+
+        assertThat(flagged).isEmpty();
+        verify(researchChangeRepository, never()).save(any());
+    }
+
+    @Test
+    void decisionsFromTheSameMeetingAreNotTreatedAsThePreviousApproach() {
+        stubMeeting();
+        when(researchDecisionRepository.findByProjectIdAndStatusOrderByCreatedAtDesc(PROJECT_ID, ResearchDecisionStatus.ACTIVE))
+            .thenReturn(List.of(activeDecision(101L, "Adopt PMC-VQA benchmark", MEETING_ID)));
+        when(researchChangeRepository.findByProjectIdOrderByDetectedAtDesc(PROJECT_ID)).thenReturn(Collections.emptyList());
+
+        List<ResearchChange> flagged = changeDetectionService.detectAndFlagChanges(
+            PROJECT_ID, MEETING_ID, extractionWithDecision("Switch dataset to LitMedImage"));
+
+        assertThat(flagged).isEmpty();
+        verify(researchChangeRepository, never()).save(any());
+    }
+
+    @Test
+    void duplicateChangesWithinOneExtractionAreFlaggedOnce() {
+        stubMeeting();
+        when(researchChangeRepository.findByProjectIdOrderByDetectedAtDesc(PROJECT_ID)).thenReturn(Collections.emptyList());
+        when(researchChangeRepository.save(any(ResearchChange.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ExtractedResearchChange first = new ExtractedResearchChange();
+        first.setPreviousApproach("PMC-VQA dataset");
+        first.setNewApproach("LitMedImage dataset");
+        ExtractedResearchChange repeat = new ExtractedResearchChange();
+        repeat.setPreviousApproach("PMC-VQA dataset");
+        repeat.setNewApproach("LitMedImage dataset");
+        MeetingExtractionResponse extraction = new MeetingExtractionResponse();
+        extraction.setResearchChanges(List.of(first, repeat));
+
+        List<ResearchChange> flagged = changeDetectionService.detectAndFlagChanges(PROJECT_ID, MEETING_ID, extraction);
+
+        assertThat(flagged).hasSize(1);
+        verify(researchChangeRepository, times(1)).save(any(ResearchChange.class));
+    }
+
+    @Test
+    void longChangeDescriptionsFitTheTitleColumns() {
+        stubMeeting();
+        when(researchChangeRepository.findByProjectIdOrderByDetectedAtDesc(PROJECT_ID)).thenReturn(Collections.emptyList());
+        when(researchChangeRepository.save(any(ResearchChange.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ExtractedResearchChange change = new ExtractedResearchChange();
+        change.setDescription("Switch " + "z".repeat(300));
+        change.setPreviousApproach("PMC-VQA dataset");
+        change.setNewApproach("LitMedImage dataset");
+        MeetingExtractionResponse extraction = new MeetingExtractionResponse();
+        extraction.setResearchChanges(List.of(change));
+
+        List<ResearchChange> flagged = changeDetectionService.detectAndFlagChanges(PROJECT_ID, MEETING_ID, extraction);
+
+        assertThat(flagged.get(0).getTitle()).hasSize(255);
+        ArgumentCaptor<ResearchEvent> eventCaptor = ArgumentCaptor.forClass(ResearchEvent.class);
+        verify(researchEventRepository).save(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getTitle()).hasSize(255).startsWith("Flagged Change: Switch zzz");
+    }
+
+    @Test
     void updatesChangeStatusSuccessfully() {
         ResearchChange change = new ResearchChange();
         change.setId(42L);
@@ -182,5 +256,31 @@ class ChangeDetectionServiceTest {
         assertThatThrownBy(() -> changeDetectionService.updateChangeStatus(999L, 42L, ResearchChangeStatus.REVIEWED))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Project not found");
+    }
+
+    private void stubMeeting() {
+        Meeting meeting = new Meeting();
+        meeting.setId(MEETING_ID);
+        meeting.setProjectId(PROJECT_ID);
+        meeting.setTitle("Evaluation review");
+        when(meetingRepository.findById(MEETING_ID)).thenReturn(Optional.of(meeting));
+    }
+
+    private static ResearchDecision activeDecision(Long id, String title, Long meetingId) {
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(id);
+        decision.setProjectId(PROJECT_ID);
+        decision.setMeetingId(meetingId);
+        decision.setTitle(title);
+        decision.setStatus(ResearchDecisionStatus.ACTIVE);
+        return decision;
+    }
+
+    private static MeetingExtractionResponse extractionWithDecision(String title) {
+        ExtractedDecision decision = new ExtractedDecision();
+        decision.setTitle(title);
+        MeetingExtractionResponse extraction = new MeetingExtractionResponse();
+        extraction.setDecisions(List.of(decision));
+        return extraction;
     }
 }

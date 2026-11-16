@@ -491,6 +491,37 @@ class TaskServiceTest {
     }
 
     @Test
+    void completionEventTitleFitsTheColumnForLongTaskTitles() {
+        Task existing = new Task();
+        existing.setId(710L);
+        existing.setTitle("x".repeat(250));
+        existing.setProjectId(PROJECT_ID);
+        existing.setStatus(TaskStatus.IN_PROGRESS);
+        existing.setResearchDecisionId(10L);
+
+        when(taskRepository.findById(710L)).thenReturn(Optional.of(existing));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(10L);
+        decision.setProjectId(PROJECT_ID);
+        when(researchDecisionRepository.findById(10L)).thenReturn(Optional.of(decision));
+
+        Task update = new Task();
+        update.setId(710L);
+        update.setStatus(TaskStatus.COMPLETED);
+
+        taskService.saveTask(update);
+
+        ArgumentCaptor<ResearchEvent> eventCaptor = ArgumentCaptor.forClass(ResearchEvent.class);
+        verify(researchEventRepository).save(eventCaptor.capture());
+        String title = eventCaptor.getValue().getTitle();
+        assertThat(title).hasSize(255);
+        assertThat(title).startsWith("Task Completed: xxx");
+        assertThat(title).endsWith("\u2026");
+    }
+
+    @Test
     void completingTaskLinkedToExperimentCreatesResearchEvent() {
         Task existing = new Task();
         existing.setId(702L);

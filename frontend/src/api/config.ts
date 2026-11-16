@@ -72,6 +72,26 @@ export async function parseJsonResponse<T>(
   }
 }
 
+/**
+ * Builds the message for a failed API response. Uses the backend's `message` field when the
+ * error body carries one, otherwise falls back to the HTTP status code.
+ */
+export async function readErrorMessage(response: Response, contextMessage: string): Promise<string> {
+  let reason = ''
+  const contentType = response.headers?.get?.('content-type') || ''
+  if (contentType.includes('json')) {
+    try {
+      const body = (await response.json()) as { message?: unknown }
+      if (typeof body?.message === 'string') {
+        reason = body.message.trim()
+      }
+    } catch {
+      // Unreadable error body: fall back to the status code
+    }
+  }
+  return reason ? `${contextMessage}: ${reason}` : `${contextMessage} (${response.status})`
+}
+
 // Safely access Vite import.meta.env
 const metaEnv = typeof import.meta !== 'undefined' && 'env' in import.meta
   ? (import.meta as { env?: Record<string, string | boolean | undefined> }).env

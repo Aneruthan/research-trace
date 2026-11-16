@@ -2,11 +2,13 @@ package com.researchtrace.backend.dto.research;
 
 import com.researchtrace.backend.model.ExperimentStatus;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public class ExperimentRequest {
 
     @NotBlank(message = "Title is required")
+    @Size(max = 255, message = "Title must be at most 255 characters")
     private String title;
 
     private Long researchDecisionId;

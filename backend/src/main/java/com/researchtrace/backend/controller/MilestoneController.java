@@ -1,8 +1,10 @@
 package com.researchtrace.backend.controller;
 
+import com.researchtrace.backend.dto.MilestoneUpdateRequest;
 import com.researchtrace.backend.model.Milestone;
 import com.researchtrace.backend.service.MilestoneService;
 import com.researchtrace.backend.service.ProgressService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -54,7 +56,7 @@ public class MilestoneController {
     @PutMapping("/{id}")
     public Milestone updateMilestone(
         @PathVariable Long id,
-        @RequestBody Milestone milestone) {
+        @Valid @RequestBody MilestoneUpdateRequest milestone) {
 
         return milestoneService.updateMilestone(id, milestone);
     }

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { getProjectMeetings } from '../api/meetings'
 import {
+  createProjectExperiment,
   extractResearch,
   getDecisionLineage,
   getResearchReviews,
   getResearchSummary,
   submitResearchReview,
   supersedeResearchDecision,
+  updateExperimentDecision,
   updateResearchChangeStatus,
   type DecisionLineageView,
   type Experiment,
@@ -24,6 +26,7 @@ import type { Meeting } from '../api/types'
 import { PageHeader } from '../components/common/PageHeader'
 import { ExtractionSections } from '../components/research/ExtractionSections'
 import { PersistedResearch } from '../components/research/PersistedResearch'
+import { buildDecisionChains, reviewOutcomeMessage } from '../components/research/researchDisplay'
 
 const SELECTED_PROJECT_ID = 1
 
@@ -58,6 +61,8 @@ export function ResearchTrace() {
   const [supersedeTarget, setSupersedeTarget] = useState<ResearchDecision | null>(null)
   const [supersedeTitle, setSupersedeTitle] = useState('')
   const [supersedeRationale, setSupersedeRationale] = useState('')
+  const [supersedeMeetingId, setSupersedeMeetingId] = useState<number | null>(null)
+  const [supersedeError, setSupersedeError] = useState<string | null>(null)
   const [supersedeSubmitting, setSupersedeSubmitting] = useState(false)
 
   // Extraction & Review
@@ -161,14 +166,10 @@ export function ResearchTrace() {
     setStatusMessage(null)
     try {
       await submitResearchReview(meetingId, status, extraction)
+      setExtraction(null)
       setReviews(await getResearchReviews(meetingId))
       await refreshSummary()
-
-      if (status === 'ACCEPTED' || status === 'EDITED') {
-        setStatusMessage(`Research review saved as ${status}. Verified decisions, experiments, and results are now added to the research trace!`)
-      } else {
-        setStatusMessage(`Research review saved as ${status}. No records were added to the permanent trace.`)
-      }
+      setStatusMessage(reviewOutcomeMessage(status))
     } catch (cause: unknown) {
       setErrorMessage(cause instanceof Error ? cause.message : 'Could not save the research review')
     } finally {
@@ -198,27 +199,49 @@ export function ResearchTrace() {
     setSupersedeTarget(target)
     setSupersedeTitle('')
     setSupersedeRationale('')
+    setSupersedeMeetingId(null)
+    setSupersedeError(null)
     setSupersedeModalOpen(true)
   }
 
   async function handleConfirmSupersede() {
     if (!supersedeTarget || !supersedeTarget.id || !supersedeTitle.trim() || !supersedeRationale.trim()) return
     setSupersedeSubmitting(true)
+    setSupersedeError(null)
+    setStatusMessage(null)
+    setErrorMessage(null)
     try {
       await supersedeResearchDecision(SELECTED_PROJECT_ID, supersedeTarget.id, {
         title: supersedeTitle.trim(),
         rationale: supersedeRationale.trim(),
-        meetingId: meetingId ?? undefined,
+        meetingId: supersedeMeetingId ?? undefined,
       })
       setSupersedeModalOpen(false)
       setSupersedeTarget(null)
       setStatusMessage(`Decision "${supersedeTarget.title}" was superseded by "${supersedeTitle.trim()}".`)
       await refreshSummary()
     } catch (cause: unknown) {
-      setErrorMessage(cause instanceof Error ? cause.message : 'Could not supersede decision')
+      setSupersedeError(cause instanceof Error ? cause.message : 'Could not supersede decision')
     } finally {
       setSupersedeSubmitting(false)
     }
+  }
+
+  async function handleCreateExperiment(title: string, decisionId: number | null) {
+    setErrorMessage(null)
+    await createProjectExperiment(SELECTED_PROJECT_ID, {
+      title,
+      researchDecisionId: decisionId,
+    })
+    setStatusMessage(`Experiment "${title}" was added.`)
+    await refreshSummary()
+  }
+
+  async function handleLinkExperiment(experimentId: number, decisionId: number | null) {
+    setErrorMessage(null)
+    await updateExperimentDecision(SELECTED_PROJECT_ID, experimentId, decisionId)
+    setStatusMessage(decisionId == null ? 'Experiment decision link cleared.' : 'Experiment linked to the selected decision.')
+    await refreshSummary()
   }
 
   async function handleUpdateChangeStatus(changeId: number, newStatus: ResearchChangeStatus) {
@@ -325,27 +348,25 @@ export function ResearchTrace() {
               <p className="mt-4 text-xs text-stone-500">No decisions recorded yet. Run a meeting extraction to seed the tree.</p>
             ) : (
               <div className="mt-6 space-y-4">
-                {decisions
-                  .filter((d) => d.supersedesDecisionId == null)
-                  .map((root) => {
-                    const successor = decisions.find((d) => d.supersedesDecisionId === root.id)
-                    return (
-                      <div key={root.id} className="rounded-md border border-stone-200 bg-stone-50/50 p-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${root.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                            {root.status}
-                          </span>
-                          <span className="text-xs font-bold text-stone-900">{root.title}</span>
-                          <span className="text-[11px] text-stone-500">({root.decidedAt ?? 'undated'})</span>
-                        </div>
-                        {root.rationale && <p className="mt-1 text-xs text-stone-600 pl-4 border-l border-stone-300">Rationale: {root.rationale}</p>}
+                {buildDecisionChains(decisions).map(([root, ...successors]) => (
+                  <div key={root.id} className="rounded-md border border-stone-200 bg-stone-50/50 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${decisionStatusClass(root.status)}`}>
+                        {root.status}
+                      </span>
+                      <span className="text-xs font-bold text-stone-900">{root.title}</span>
+                      <span className="text-[11px] text-stone-500">({root.decidedAt ?? 'undated'})</span>
+                    </div>
+                    {root.rationale && <p className="mt-1 text-xs text-stone-600 pl-4 border-l border-stone-300">Rationale: {root.rationale}</p>}
 
-                        {successor && (
-                          <div className="mt-3 ml-6 space-y-2 border-l-2 border-indigo-200 pl-4">
+                    {successors.length > 0 && (
+                      <div className="mt-3 ml-6 space-y-2 border-l-2 border-indigo-200 pl-4">
+                        {successors.map((successor) => (
+                          <div key={successor.id} className="space-y-2">
                             <span className="text-[11px] font-semibold text-indigo-700">&darr; Pivoted to:</span>
                             <div className="rounded border border-indigo-100 bg-white p-3">
                               <div className="flex items-center gap-2">
-                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${decisionStatusClass(successor.status)}`}>
                                   {successor.status}
                                 </span>
                                 <span className="text-xs font-bold text-stone-900">{successor.title}</span>
@@ -355,10 +376,11 @@ export function ResearchTrace() {
                               )}
                             </div>
                           </div>
-                        )}
+                        ))}
                       </div>
-                    )
-                  })}
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -633,6 +655,8 @@ export function ResearchTrace() {
         experiments={experiments}
         results={results}
         events={timeline}
+        onCreateExperiment={handleCreateExperiment}
+        onLinkExperiment={handleLinkExperiment}
       />
 
       {/* Supersede Modal */}
@@ -666,13 +690,40 @@ export function ResearchTrace() {
                   placeholder="Explain what experiment, result, or observation motivated this change..."
                 />
               </label>
+
+              <label className="block text-xs font-medium text-stone-700">
+                Related meeting (optional)
+                <select
+                  className="mt-1 block w-full rounded border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  value={supersedeMeetingId ?? ''}
+                  onChange={(e) => setSupersedeMeetingId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">No meeting</option>
+                  {meetings
+                    .filter((m) => m.id != null)
+                    .map((m) => (
+                      <option key={m.id} value={m.id ?? ''}>
+                        {m.title ?? 'Untitled'} ({m.meetingDate ?? 'No date'})
+                      </option>
+                    ))}
+                </select>
+              </label>
             </div>
+
+            {supersedeError && (
+              <p className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800" role="alert">
+                {supersedeError}
+              </p>
+            )}
 
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
                 className="rounded px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
-                onClick={() => setSupersedeModalOpen(false)}
+                onClick={() => {
+                  setSupersedeModalOpen(false)
+                  setSupersedeError(null)
+                }}
               >
                 Cancel
               </button>
@@ -835,6 +886,9 @@ function LineageViewer({
                   <span className="text-[11px] text-stone-500">{ev.experiment.status}</span>
                 </div>
                 <p className="mt-1 text-stone-600"><span className="font-medium">Hypothesis:</span> {ev.experiment.hypothesis}</p>
+                <p className="mt-1 text-stone-600">
+                  <span className="font-medium">Linked decision:</span> {lineage.decision.title ?? 'Untitled decision'}
+                </p>
 
                 {ev.results.length > 0 && (
                   <div className="mt-2 space-y-1 border-t border-stone-100 pt-2">
@@ -875,6 +929,10 @@ function EventTypeBadge({ type }: { type: string }) {
     TASK_COMPLETED: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
   }
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${map[type] ?? 'bg-stone-100 text-stone-800'}`}>{type}</span>
+}
+
+function decisionStatusClass(status: ResearchDecision['status']): string {
+  return status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
 }
 
 function ChangeStatusBadge({ status }: { status: string }) {

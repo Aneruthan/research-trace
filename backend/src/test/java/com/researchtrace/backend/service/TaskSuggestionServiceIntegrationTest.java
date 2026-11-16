@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 @DataJpaTest
-@Import({TaskSuggestionService.class, StubTaskExtractor.class, ProgressService.class, MilestoneService.class})
+@Import({TaskSuggestionService.class, TaskService.class, StubTaskExtractor.class, ProgressService.class, MilestoneService.class})
 class TaskSuggestionServiceIntegrationTest {
 
     private static final Long PROJECT_ID = 1L;

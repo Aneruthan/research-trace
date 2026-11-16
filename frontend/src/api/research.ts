@@ -1,4 +1,4 @@
-import { API_BASE_URL, parseJsonResponse } from './config.ts'
+import { API_BASE_URL, parseJsonResponse, readErrorMessage } from './config.ts'
 import type { Meeting } from './types.ts'
 
 export type ResearchReviewStatus = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED'
@@ -273,7 +273,7 @@ export async function getProjectResearchEvents(
 async function getJson<T>(path: string, signal: AbortSignal | undefined, fallback: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { signal })
   if (!response.ok) {
-    throw new Error(`${fallback} (${response.status})`)
+    throw new Error(await readErrorMessage(response, fallback))
   }
   return parseJsonResponse<T>(response, fallback)
 }
@@ -337,6 +337,40 @@ export async function createResearchDecision(
     throw new ApiError(await failureMessage(response, 'Could not create research decision'), response.status)
   }
   return response.json() as Promise<ResearchDecision>
+}
+
+export async function createProjectExperiment(
+  projectId: number,
+  request: { title: string; researchDecisionId?: number | null },
+): Promise<Experiment> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/research/experiments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not create experiment'), response.status)
+  }
+  return parseJsonResponse<Experiment>(response, 'Could not create experiment')
+}
+
+export async function updateExperimentDecision(
+  projectId: number,
+  experimentId: number,
+  researchDecisionId: number | null,
+): Promise<Experiment> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/research/experiments/${experimentId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ researchDecisionId }),
+    },
+  )
+  if (!response.ok) {
+    throw new ApiError(await failureMessage(response, 'Could not update the experiment link'), response.status)
+  }
+  return parseJsonResponse<Experiment>(response, 'Could not update the experiment link')
 }
 
 export async function supersedeResearchDecision(
@@ -427,5 +461,5 @@ async function failureMessage(response: Response, fallback: string): Promise<str
   if (response.status === 503) {
     return 'Gemini research extraction is not configured (503).'
   }
-  return `${fallback} (${response.status})`
+  return readErrorMessage(response, fallback)
 }

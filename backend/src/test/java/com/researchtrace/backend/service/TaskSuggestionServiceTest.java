@@ -113,6 +113,9 @@ class TaskSuggestionServiceTest {
     @Mock
     private ExperimentRepository experimentRepository;
 
+    @Mock
+    private TaskService taskService;
+
     private TaskSuggestionService service;
 
     @BeforeEach
@@ -126,7 +129,8 @@ class TaskSuggestionServiceTest {
             taskRepository,
             taskExtractor,
             researchDecisionRepository,
-            experimentRepository);
+            experimentRepository,
+            taskService);
 
         lenient().when(meetingRepository.findById(MEETING_ID)).thenReturn(Optional.of(meeting(PROJECT_ID)));
 
@@ -136,6 +140,8 @@ class TaskSuggestionServiceTest {
             member(PROJECT_ID, PROFESSOR_ID, ProjectMemberRole.PROFESSOR)));
         lenient().when(projectMemberRepository.findByProjectId(OTHER_PROJECT_ID)).thenReturn(List.of(
             member(OTHER_PROJECT_ID, OTHER_PROJECT_STUDENT_ID, ProjectMemberRole.STUDENT)));
+        lenient().when(userRepository.findById(any())).thenAnswer(invocation ->
+            Optional.ofNullable(USERS.get(invocation.getArgument(0))));
         lenient().when(userRepository.findAllById(anyIterable())).thenAnswer(invocation -> {
             Iterable<Long> ids = invocation.getArgument(0);
             return StreamSupport.stream(ids.spliterator(), false)
@@ -430,6 +436,7 @@ class TaskSuggestionServiceTest {
         assertThat(task.getProjectId()).isEqualTo(PROJECT_ID);
         assertThat(task.getMeetingId()).isEqualTo(MEETING_ID);
         assertThat(task.getTaskSuggestionId()).isEqualTo(SUGGESTION_ID);
+        verify(taskService).syncMilestoneStatus(BASELINE_MILESTONE_ID);
         assertThat(task.getCreatedAt()).isNotNull();
         assertThat(task.getUpdatedAt()).isNotNull();
         assertThat(created).isSameAs(task);
@@ -644,6 +651,69 @@ class TaskSuggestionServiceTest {
     private static ExtractedTask extractedWithConfidence(String title, String confidence) {
         return new ExtractedTask(title, null, null, null, null, null, null,
             confidence == null ? null : new BigDecimal(confidence));
+    }
+
+    @Test
+    void explicitNullClearsOptionalFieldsAndKeepsOmittedTitle() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        suggestion.setResearchDecisionId(4L);
+        suggestion.setExperimentId(5L);
+        givenSuggestion(suggestion);
+
+        AcceptTaskSuggestionRequest clear = new AcceptTaskSuggestionRequest();
+        clear.setDescription(null);
+        clear.setAssigneeId(null);
+        clear.setMilestoneId(null);
+        clear.setDueDate(null);
+        clear.setResearchDecisionId(null);
+        clear.setExperimentId(null);
+
+        TaskSuggestion updated = service.update(SUGGESTION_ID, clear);
+
+        assertThat(updated.getTitle()).isEqualTo("Run Qwen baseline");
+        assertThat(updated.getDescription()).isNull();
+        assertThat(updated.getAssigneeId()).isNull();
+        assertThat(updated.getAssigneeName()).isNull();
+        assertThat(updated.getMilestoneId()).isNull();
+        assertThat(updated.getDueDate()).isNull();
+        assertThat(updated.getResearchDecisionId()).isNull();
+        assertThat(updated.getExperimentId()).isNull();
+    }
+
+    @Test
+    void omittedFieldsStayUnchanged() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        givenSuggestion(suggestion);
+
+        TaskSuggestion updated = service.update(SUGGESTION_ID, titleOnly("Run Qwen baseline again"));
+
+        assertThat(updated.getTitle()).isEqualTo("Run Qwen baseline again");
+        assertThat(updated.getDescription()).isEqualTo("Evaluate on the dev split");
+        assertThat(updated.getAssigneeId()).isEqualTo(ANERUTHAN_ID);
+        assertThat(updated.getAssigneeName()).isEqualTo("Aneruthan");
+        assertThat(updated.getMilestoneId()).isEqualTo(BASELINE_MILESTONE_ID);
+        assertThat(updated.getDueDate()).isEqualTo(LocalDate.of(2026, 10, 5));
+    }
+
+    @Test
+    void changingAssigneeUpdatesTheDisplayedName() {
+        TaskSuggestion suggestion = pendingSuggestion(SUGGESTION_ID);
+        givenSuggestion(suggestion);
+
+        TaskSuggestion updated = service.update(SUGGESTION_ID, assigneeOnly(GAYATHRI_ID));
+
+        assertThat(updated.getAssigneeId()).isEqualTo(GAYATHRI_ID);
+        assertThat(updated.getAssigneeName()).isEqualTo("Gayathri");
+    }
+
+    @Test
+    void clearingTheTitleIsRejected() {
+        givenSuggestion(pendingSuggestion(SUGGESTION_ID));
+        AcceptTaskSuggestionRequest clearTitle = new AcceptTaskSuggestionRequest();
+        clearTitle.setTitle("   ");
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.update(SUGGESTION_ID, clearTitle));
+        verify(taskSuggestionRepository, never()).save(any());
     }
 
     private static AcceptTaskSuggestionRequest titleOnly(String title) {

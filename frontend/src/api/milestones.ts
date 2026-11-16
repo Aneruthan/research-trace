@@ -1,4 +1,4 @@
-import { API_BASE_URL, parseJsonResponse } from './config.ts'
+import { API_BASE_URL, parseJsonResponse, readErrorMessage } from './config.ts'
 import type { Milestone } from './types.ts'
 
 export async function getProjectMilestones(
@@ -10,7 +10,7 @@ export async function getProjectMilestones(
     cache: 'no-store',
   })
   if (!response.ok) {
-    throw new Error(`Could not load milestones for project ${projectId} (${response.status})`)
+    throw new Error(await readErrorMessage(response, `Could not load milestones for project ${projectId}`))
   }
   return parseJsonResponse<Milestone[]>(response, `Could not load milestones for project ${projectId}`)
 }
@@ -25,7 +25,7 @@ export async function getMilestoneProgress(
     : `${API_BASE_URL}/api/milestones/${milestoneId}/progress`
   const response = await fetch(url, { signal, cache: 'no-store' })
   if (!response.ok) {
-    throw new Error(`Could not load milestone progress (${response.status})`)
+    throw new Error(await readErrorMessage(response, 'Could not load milestone progress'))
   }
   return parseJsonResponse<number>(response, 'Could not load milestone progress')
 }
@@ -47,7 +47,7 @@ export async function updateMilestone(milestone: Milestone): Promise<Milestone> 
     }),
   })
   if (!response.ok) {
-    throw new Error(`Could not update milestone ${milestone.id} (${response.status})`)
+    throw new Error(await readErrorMessage(response, `Could not update milestone ${milestone.id}`))
   }
   return parseJsonResponse<Milestone>(response, `Could not update milestone ${milestone.id}`)
 }

@@ -9,6 +9,7 @@ import com.researchtrace.backend.model.TaskHistory;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.model.TaskSuggestion;
 import com.researchtrace.backend.model.TaskSuggestionStatus;
+import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.ExperimentRepository;
 import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import com.researchtrace.backend.repository.ResearchEventRepository;
@@ -272,7 +273,7 @@ public class TaskService {
                 event.setProjectId(saved.getProjectId());
                 event.setTaskId(saved.getId());
                 event.setEventType(ResearchEventType.TASK_COMPLETED);
-                event.setTitle("Task Completed: " + saved.getTitle());
+                event.setTitle(TextLimits.title("Task Completed: " + saved.getTitle()));
                 String desc = (saved.getDescription() != null && !saved.getDescription().isBlank())
                     ? saved.getDescription()
                     : "Task '" + saved.getTitle() + "' marked as completed.";
@@ -305,6 +306,10 @@ public class TaskService {
             return;
         }
         Milestone milestone = opt.get();
+        if (milestone.getStatus() == MilestoneStatus.BLOCKED
+                || milestone.getStatus() == MilestoneStatus.DEFERRED) {
+            return;
+        }
         List<Task> tasks = taskRepository.findByMilestoneId(milestoneId);
         if (tasks.isEmpty()) {
             // No associated tasks: preserve existing manual status

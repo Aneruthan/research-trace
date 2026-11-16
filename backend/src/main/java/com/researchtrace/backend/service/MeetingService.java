@@ -1,6 +1,7 @@
 package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.model.Meeting;
+import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.ExperimentRepository;
 import com.researchtrace.backend.repository.ExtractionReviewRepository;
 import com.researchtrace.backend.repository.MeetingRepository;
@@ -94,6 +95,7 @@ public class MeetingService {
         if (meeting.getTitle() == null || meeting.getTitle().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting title must not be blank");
         }
+        rejectLongTitle(meeting.getTitle());
         if (meeting.getMeetingDate() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting date must not be null");
         }
@@ -122,6 +124,7 @@ public class MeetingService {
             if (update.getTitle().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting title must not be blank");
             }
+            rejectLongTitle(update.getTitle());
             existing.setTitle(update.getTitle());
         }
 
@@ -198,5 +201,11 @@ public class MeetingService {
         }
 
         meetingRepository.delete(meeting);
+    }
+
+    private static void rejectLongTitle(String title) {
+        if (title != null && title.length() > TextLimits.TITLE_MAX_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title must be at most 255 characters");
+        }
     }
 }

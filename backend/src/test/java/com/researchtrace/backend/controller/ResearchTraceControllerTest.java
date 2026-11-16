@@ -30,6 +30,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -160,6 +161,31 @@ class ResearchTraceControllerTest {
             .andExpect(jsonPath("$.predecessorDecision.id").value(10))
             .andExpect(jsonPath("$.experiments[0].experiment.id").value(50))
             .andExpect(jsonPath("$.experiments[0].results[0].id").value(60));
+    }
+
+    @Test
+    void updatesExperimentDecisionLinkIncludingAnExplicitClear() throws Exception {
+        Experiment exp = new Experiment();
+        exp.setId(70L);
+        exp.setProjectId(PROJECT_ID);
+        exp.setResearchDecisionId(50L);
+        when(researchTraceService.updateExperimentDecision(PROJECT_ID, 70L, 50L)).thenReturn(exp);
+
+        mockMvc.perform(put("/api/projects/1/research/experiments/70")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"researchDecisionId\": 50}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.researchDecisionId").value(50));
+        verify(researchTraceService).updateExperimentDecision(PROJECT_ID, 70L, 50L);
+
+        exp.setResearchDecisionId(null);
+        when(researchTraceService.updateExperimentDecision(PROJECT_ID, 70L, null)).thenReturn(exp);
+
+        mockMvc.perform(put("/api/projects/1/research/experiments/70")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"researchDecisionId\": null}"))
+            .andExpect(status().isOk());
+        verify(researchTraceService).updateExperimentDecision(PROJECT_ID, 70L, null);
     }
 
     @Test

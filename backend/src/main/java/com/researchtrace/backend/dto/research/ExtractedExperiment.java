@@ -7,6 +7,7 @@ public class ExtractedExperiment {
     private String objective;
     private String variables;
     private String expectedOutcome;
+    private String method;
     private Long source;
     private Double confidence;
 
@@ -48,6 +49,14 @@ public class ExtractedExperiment {
 
     public void setExpectedOutcome(String expectedOutcome) {
         this.expectedOutcome = expectedOutcome;
+    }
+
+    public String getMethod() {
+        return method;
+    }
+
+    public void setMethod(String method) {
+        this.method = method;
     }
 
     public Long getSource() {

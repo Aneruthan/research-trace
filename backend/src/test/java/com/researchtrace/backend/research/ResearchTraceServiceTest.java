@@ -207,6 +207,44 @@ class ResearchTraceServiceTest {
     }
 
     @Test
+    void manualDecisionLinkCanBeSetAndCleared() {
+        Experiment experiment = new Experiment();
+        experiment.setId(70L);
+        experiment.setProjectId(PROJECT_ID);
+        experiment.setTitle("Bias audit");
+        when(experimentRepository.findById(70L)).thenReturn(Optional.of(experiment));
+        when(experimentRepository.save(any(Experiment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(50L);
+        decision.setProjectId(PROJECT_ID);
+        when(researchDecisionRepository.findById(50L)).thenReturn(Optional.of(decision));
+
+        Experiment linked = researchTraceService.updateExperimentDecision(PROJECT_ID, 70L, 50L);
+        assertThat(linked.getResearchDecisionId()).isEqualTo(50L);
+
+        Experiment cleared = researchTraceService.updateExperimentDecision(PROJECT_ID, 70L, null);
+        assertThat(cleared.getResearchDecisionId()).isNull();
+    }
+
+    @Test
+    void manualDecisionLinkRejectsAnotherProjectsDecision() {
+        Experiment experiment = new Experiment();
+        experiment.setId(70L);
+        experiment.setProjectId(PROJECT_ID);
+        when(experimentRepository.findById(70L)).thenReturn(Optional.of(experiment));
+
+        ResearchDecision other = new ResearchDecision();
+        other.setId(50L);
+        other.setProjectId(OTHER_PROJECT_ID);
+        when(researchDecisionRepository.findById(50L)).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> researchTraceService.updateExperimentDecision(PROJECT_ID, 70L, 50L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("different project");
+    }
+
+    @Test
     void recordResultValidatesExperimentBelongsToSameProject() {
         Experiment otherExp = new Experiment();
         otherExp.setId(70L);

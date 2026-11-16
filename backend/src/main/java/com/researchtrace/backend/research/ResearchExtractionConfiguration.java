@@ -1,17 +1,19 @@
 package com.researchtrace.backend.research;
 
 import com.researchtrace.backend.ai.GeminiConfigurationValidator;
+import com.researchtrace.backend.ai.GeminiModeConditions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ResearchExtractionConfiguration {
 
     @Bean
-    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "gemini", matchIfMissing = true)
+    @Conditional(GeminiModeConditions.ResearchGemini.class)
     public ResearchNotesExtractor geminiResearchNotesExtractor(
             ChatClient.Builder chatClientBuilder,
             @Value("${spring.ai.google.genai.api-key:}") String apiKey) {
@@ -20,7 +22,7 @@ public class ResearchExtractionConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "research-extractor.mode", havingValue = "unconfigured")
+    @Conditional(GeminiModeConditions.ResearchUnconfigured.class)
     public ResearchNotesExtractor unconfiguredResearchNotesExtractor() {
         return new UnconfiguredResearchNotesExtractor();
     }

@@ -9,6 +9,7 @@ import com.researchtrace.backend.model.ExperimentStatus;
 import com.researchtrace.backend.model.ExtractionReviewStatus;
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.model.ResearchDecisionStatus;
+import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.repository.ExperimentRepository;
 import com.researchtrace.backend.repository.ExtractionReviewRepository;
@@ -26,13 +27,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import({
@@ -108,6 +113,7 @@ class AcceptedReviewPersistenceTest {
                 assertThat(decision.getTitle()).isEqualTo("Keep the baseline");
                 assertThat(decision.getDecisionText()).isEqualTo("Continue measuring the current model.");
                 assertThat(decision.getRationale()).isEqualTo("The bias numbers are not ready.");
+                assertThat(decision.getCreatedByUserId()).isNull();
                 assertThat(decision.getMeetingId()).isEqualTo(meetingId);
                 assertThat(decision.getExtractionReviewId()).isNotNull();
                 assertThat(decision.getProjectId()).isEqualTo(PROJECT_ID);
@@ -118,6 +124,7 @@ class AcceptedReviewPersistenceTest {
             .satisfies(experiment -> {
                 assertThat(experiment.getTitle()).isEqualTo("Bias audit");
                 assertThat(experiment.getHypothesis()).isEqualTo("The baseline has a measurable gap.");
+                assertThat(experiment.getMethod()).isEqualTo("Audit the confusion matrix by hand.");
                 assertThat(experiment.getStatus()).isEqualTo(ExperimentStatus.PLANNED);
                 assertThat(experiment.getResearchDecisionId()).isNull();
                 assertThat(experiment.getMeetingId()).isEqualTo(meetingId);
@@ -127,6 +134,7 @@ class AcceptedReviewPersistenceTest {
             .satisfies(result -> {
                 assertThat(result.getSummary()).isEqualTo("Gender gap is 4 points.");
                 assertThat(result.getDataOrMetric()).isEqualTo("accuracy gap = 0.04");
+                assertThat(result.getComparison()).isEqualTo("Worse than the previous split.");
                 assertThat(result.getExperimentId()).isNotNull();
                 assertThat(result.getMeetingId()).isEqualTo(meetingId);
             });
@@ -174,6 +182,20 @@ class AcceptedReviewPersistenceTest {
         assertThat(experimentRepository.count()).isEqualTo(1);
         assertThat(resultRepository.count()).isEqualTo(1);
         assertThat(researchEventRepository.count()).isEqualTo(3);
+
+        extractionReviewService.reviewExtraction(meetingId, request(ExtractionReviewStatus.ACCEPTED, validExtraction()));
+        assertThat(researchDecisionRepository.count()).isEqualTo(1);
+        assertThat(experimentRepository.count()).isEqualTo(1);
+        assertThat(resultRepository.count()).isEqualTo(1);
+        assertThat(researchEventRepository.count()).isEqualTo(3);
+
+        MeetingExtractionResponse different = validExtraction();
+        different.getDecisions().get(0).setTitle("Switch to the balanced split");
+        extractionReviewService.reviewExtraction(meetingId, request(ExtractionReviewStatus.ACCEPTED, different));
+        assertThat(researchDecisionRepository.count()).isEqualTo(2);
+        assertThat(experimentRepository.count()).isEqualTo(2);
+        assertThat(resultRepository.count()).isEqualTo(2);
+        assertThat(researchEventRepository.count()).isEqualTo(6);
     }
 
     @Test
@@ -200,6 +222,51 @@ class AcceptedReviewPersistenceTest {
         assertThat(extractionReviewRepository.count()).isEqualTo(1);
     }
 
+    @Test
+    void h2EnforcesTheTitleColumnLength() {
+        ResearchEvent event = new ResearchEvent();
+        event.setProjectId(PROJECT_ID);
+        event.setEventType(ResearchEventType.RESULT);
+        event.setOccurredAt(LocalDateTime.now());
+        event.setTitle("t".repeat(256));
+
+        assertThatThrownBy(() -> researchEventRepository.saveAndFlush(event))
+            .isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void longExtractedTextIsShortenedInsteadOfFailingTheReview() {
+        String decisionTitle = "Decision " + "d".repeat(300);
+        String experimentTitle = "Experiment " + "e".repeat(300);
+        String resultSummary = "Result " + "r".repeat(300);
+        ExtractedDecision decision = new ExtractedDecision();
+        decision.setTitle(decisionTitle);
+        ExtractedExperiment experiment = new ExtractedExperiment();
+        experiment.setTitle(experimentTitle);
+        ExtractedResult result = new ExtractedResult();
+        result.setDescription(resultSummary);
+        result.setExperiment(experimentTitle);
+        MeetingExtractionResponse extraction = new MeetingExtractionResponse();
+        extraction.setDecisions(List.of(decision));
+        extraction.setExperiments(List.of(experiment));
+        extraction.setResults(List.of(result));
+
+        extractionReviewService.reviewExtraction(meetingId, request(ExtractionReviewStatus.ACCEPTED, extraction));
+
+        assertThat(researchDecisionRepository.findByProjectIdAndStatus(PROJECT_ID, ResearchDecisionStatus.ACTIVE))
+            .singleElement()
+            .satisfies(saved -> assertThat(saved.getTitle()).hasSize(255).startsWith("Decision ddd").endsWith("\u2026"));
+        assertThat(experimentRepository.findByProjectId(PROJECT_ID))
+            .singleElement()
+            .satisfies(saved -> assertThat(saved.getTitle()).hasSize(255).startsWith("Experiment eee"));
+        assertThat(resultRepository.findByProjectId(PROJECT_ID))
+            .singleElement()
+            .satisfies(saved -> assertThat(saved.getSummary()).isEqualTo(resultSummary));
+        assertThat(researchEventRepository.findByProjectIdOrderByOccurredAtAscIdAsc(PROJECT_ID))
+            .hasSize(3)
+            .allSatisfy(event -> assertThat(event.getTitle().length()).isLessThanOrEqualTo(255));
+    }
+
     private ExtractionReviewRequest request(ExtractionReviewStatus status, MeetingExtractionResponse extraction) {
         ExtractionReviewRequest request = new ExtractionReviewRequest();
         request.setStatus(status);
@@ -212,14 +279,17 @@ class AcceptedReviewPersistenceTest {
         decision.setTitle("Keep the baseline");
         decision.setDescription("Continue measuring the current model.");
         decision.setReason("The bias numbers are not ready.");
+        decision.setMadeBy("Aneruthan");
         ExtractedExperiment experiment = new ExtractedExperiment();
         experiment.setTitle("Bias audit");
         experiment.setObjective("The baseline has a measurable gap.");
+        experiment.setMethod("Audit the confusion matrix by hand.");
         experiment.setVariables("gender, skin tone");
         ExtractedResult result = new ExtractedResult();
         result.setDescription("Gender gap is 4 points.");
         result.setExperiment("Bias audit");
         result.setMetrics("accuracy gap = 0.04");
+        result.setComparison("Worse than the previous split.");
         MeetingExtractionResponse extraction = new MeetingExtractionResponse();
         extraction.setDecisions(java.util.List.of(decision));
         extraction.setExperiments(java.util.List.of(experiment));

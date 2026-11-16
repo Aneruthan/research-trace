@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { assigneeLabel } from '../../api/users'
+import { assigneeLabel, studentLabel } from '../../api/users'
 import type {
   Meeting,
   Milestone,
@@ -180,7 +180,7 @@ function ProgressMeter({ label, value }: { label: string; value: number | null }
 function StudentProgressRow({ item, users }: { item: StudentProgressItem; users: User[] }) {
   return (
     <li>
-      <p className="text-sm font-medium text-stone-900">{assigneeLabel(item.studentId, users)}</p>
+      <p className="text-sm font-medium text-stone-900">{studentLabel(item.studentId, users)}</p>
       <ProgressMeter label="Progress" value={item.progress} />
     </li>
   )
@@ -199,7 +199,7 @@ function MilestoneRow({
         <div>
           <p className="text-sm font-medium text-stone-900">{milestone.title ?? 'Untitled milestone'}</p>
           {milestone.weight != null ? (
-            <p className="text-[11px] text-stone-500">Weight: {milestone.weight}</p>
+            <p className="text-[11px] text-stone-500">Weight: {milestone.weight} (not used in progress)</p>
           ) : null}
         </div>
         <span className="text-xs font-medium tracking-wide text-stone-500">

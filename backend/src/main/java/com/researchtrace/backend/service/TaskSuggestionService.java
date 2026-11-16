@@ -6,6 +6,7 @@ import com.researchtrace.backend.ai.TaskExtractionInput.MilestoneCandidate;
 import com.researchtrace.backend.ai.TaskExtractionInput.StudentCandidate;
 import com.researchtrace.backend.ai.TaskExtractor;
 import com.researchtrace.backend.dto.AcceptTaskSuggestionRequest;
+import com.researchtrace.backend.dto.AcceptTaskSuggestionRequest.ReviewedField;
 import com.researchtrace.backend.model.Meeting;
 import com.researchtrace.backend.model.ProjectMember;
 import com.researchtrace.backend.model.ProjectMemberRole;
@@ -54,6 +55,7 @@ public class TaskSuggestionService {
     private final TaskExtractor taskExtractor;
     private final ResearchDecisionRepository researchDecisionRepository;
     private final ExperimentRepository experimentRepository;
+    private final TaskService taskService;
 
     @Autowired
     public TaskSuggestionService(
@@ -65,7 +67,8 @@ public class TaskSuggestionService {
             TaskRepository taskRepository,
             TaskExtractor taskExtractor,
             ResearchDecisionRepository researchDecisionRepository,
-            ExperimentRepository experimentRepository) {
+            ExperimentRepository experimentRepository,
+            TaskService taskService) {
 
         this.meetingRepository = meetingRepository;
         this.taskSuggestionRepository = taskSuggestionRepository;
@@ -76,6 +79,7 @@ public class TaskSuggestionService {
         this.taskExtractor = taskExtractor;
         this.researchDecisionRepository = researchDecisionRepository;
         this.experimentRepository = experimentRepository;
+        this.taskService = taskService;
     }
 
     public TaskSuggestionService(
@@ -88,7 +92,7 @@ public class TaskSuggestionService {
             TaskExtractor taskExtractor) {
 
         this(meetingRepository, taskSuggestionRepository, projectMemberRepository, userRepository,
-             milestoneRepository, taskRepository, taskExtractor, null, null);
+             milestoneRepository, taskRepository, taskExtractor, null, null, null);
     }
 
     @Transactional
@@ -175,6 +179,7 @@ public class TaskSuggestionService {
             suggestion.setStatus(TaskSuggestionStatus.ACCEPTED);
             suggestion.setAcceptedTaskId(existingTask.getId());
             taskSuggestionRepository.save(suggestion);
+            syncAcceptedMilestone(existingTask.getMilestoneId());
             return existingTask;
         }
 
@@ -183,6 +188,7 @@ public class TaskSuggestionService {
         suggestion.setStatus(TaskSuggestionStatus.ACCEPTED);
         suggestion.setAcceptedTaskId(savedTask.getId());
         taskSuggestionRepository.save(suggestion);
+        syncAcceptedMilestone(savedTask.getMilestoneId());
 
         return savedTask;
     }
@@ -236,26 +242,28 @@ public class TaskSuggestionService {
         Long researchDecisionId = suggestion.getResearchDecisionId();
         Long experimentId = suggestion.getExperimentId();
 
+        boolean assigneeChanged = false;
         if (request != null) {
-            if (request.title() != null) {
+            if (request.has(ReviewedField.TITLE)) {
                 title = request.title();
             }
-            if (request.description() != null) {
+            if (request.has(ReviewedField.DESCRIPTION)) {
                 description = request.description();
             }
-            if (request.assigneeId() != null) {
+            if (request.has(ReviewedField.ASSIGNEE_ID)) {
                 assigneeId = request.assigneeId();
+                assigneeChanged = true;
             }
-            if (request.milestoneId() != null) {
+            if (request.has(ReviewedField.MILESTONE_ID)) {
                 milestoneId = request.milestoneId();
             }
-            if (request.dueDate() != null) {
+            if (request.has(ReviewedField.DUE_DATE)) {
                 dueDate = request.dueDate();
             }
-            if (request.researchDecisionId() != null) {
+            if (request.has(ReviewedField.RESEARCH_DECISION_ID)) {
                 researchDecisionId = request.researchDecisionId();
             }
-            if (request.experimentId() != null) {
+            if (request.has(ReviewedField.EXPERIMENT_ID)) {
                 experimentId = request.experimentId();
             }
         }
@@ -273,10 +281,28 @@ public class TaskSuggestionService {
         suggestion.setTitle(validTitle);
         suggestion.setDescription(validDescription);
         suggestion.setAssigneeId(validAssigneeId);
+        if (assigneeChanged) {
+            suggestion.setAssigneeName(assigneeName(validAssigneeId));
+        }
         suggestion.setMilestoneId(validMilestoneId);
         suggestion.setDueDate(dueDate);
         suggestion.setResearchDecisionId(validResearchDecisionId);
         suggestion.setExperimentId(validExperimentId);
+    }
+
+    private String assigneeName(Long assigneeId) {
+        if (assigneeId == null || userRepository == null) {
+            return null;
+        }
+        return userRepository.findById(assigneeId)
+            .map(user -> user.getName())
+            .orElse(null);
+    }
+
+    private void syncAcceptedMilestone(Long milestoneId) {
+        if (taskService != null) {
+            taskService.syncMilestoneStatus(milestoneId);
+        }
     }
 
     private String requireTitle(String value) {
