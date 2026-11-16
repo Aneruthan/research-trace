@@ -29,7 +29,7 @@ import { useActiveProject } from '../project/ActiveProjectContext'
 import { isCurrentProjectResponse } from '../project/projectSelection'
 import { ExtractionSections } from '../components/research/ExtractionSections'
 import { PersistedResearch } from '../components/research/PersistedResearch'
-import { buildDecisionChains, extractionOrigin, reviewOutcomeMessage } from '../components/research/researchDisplay'
+import { buildDecisionChains, extractionOrigin, incompleteExtractionIssues, reviewOutcomeMessage } from '../components/research/researchDisplay'
 
 type ActiveTab = 'overview' | 'timeline' | 'decisions' | 'changes' | 'extraction'
 
@@ -689,6 +689,11 @@ export function ResearchTrace() {
                 </div>
               </div>
 
+              {incompleteExtractionIssues(extraction).length > 0 ? (
+                <ul className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900" role="status">
+                  {incompleteExtractionIssues(extraction).map((issue) => <li key={issue}>{issue}</li>)}
+                </ul>
+              ) : null}
               <ExtractionSections extraction={extraction} onChange={setExtraction} />
             </div>
           )}

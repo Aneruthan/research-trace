@@ -1,6 +1,7 @@
 package com.researchtrace.backend.config;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -29,6 +30,14 @@ public class ApiExceptionHandler {
             ResponseStatusException exception,
             HttpServletRequest request) {
         return errorBody(exception.getStatusCode(), exception.getHeaders(), exception.getReason(), request);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleConstraintConflict(
+            DataIntegrityViolationException exception,
+            HttpServletRequest request) {
+        return errorBody(HttpStatus.CONFLICT, HttpHeaders.EMPTY,
+            "This change conflicts with existing data", request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

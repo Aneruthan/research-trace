@@ -4,9 +4,12 @@ import type { Task } from '../api/types.ts'
 import {
   filterTasks,
   isOverdueTask,
+  studentTaskDraft,
+  studentTaskEmptyMessage,
   taskCounts,
   validateMilestoneDraft,
   validatePerson,
+  validateStudentTask,
   validateTaskDraft,
 } from './work.ts'
 
@@ -51,6 +54,29 @@ test('create forms require a name, email, and title', () => {
   assert.equal(validateMilestoneDraft('', ''), 'Milestone title is required.')
   assert.equal(validateMilestoneDraft('Plan', '-1'), 'Milestone weight cannot be negative.')
   assert.equal(validateMilestoneDraft('Plan', ''), null)
+})
+
+test('a student task is created for that student and rejected outside the project', () => {
+  const draft = studentTaskDraft(7)
+  assert.equal(draft.assigneeId, 7)
+  assert.equal(draft.status, 'TODO')
+  assert.equal(validateStudentTask(draft, { studentIsMember: true, milestoneIds: [3] }), 'Task title is required.')
+  draft.title = 'Measure the gender gap'
+  assert.equal(validateStudentTask(draft, { studentIsMember: true, milestoneIds: [3] }), null)
+  draft.milestoneId = 3
+  assert.equal(validateStudentTask(draft, { studentIsMember: true, milestoneIds: [3] }), null)
+  draft.milestoneId = 99
+  assert.match(
+    validateStudentTask(draft, { studentIsMember: true, milestoneIds: [3] }) ?? '',
+    /Milestone must belong to the active project/,
+  )
+  draft.milestoneId = null
+  assert.match(
+    validateStudentTask({ ...draft, assigneeId: 8 }, { studentIsMember: false, milestoneIds: [3] }) ?? '',
+    /Student must belong to the active project/,
+  )
+  assert.equal(studentTaskEmptyMessage(0), 'No tasks assigned yet.')
+  assert.equal(studentTaskEmptyMessage(2), null)
 })
 
 function task(

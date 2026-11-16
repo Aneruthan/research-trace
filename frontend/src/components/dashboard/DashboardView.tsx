@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { formatAssignedStudents, studentNames } from '../../project/projectStudents'
 import { assigneeLabel, studentLabel } from '../../api/users'
 import { formatDateOrTimestamp, localIsoDate } from '../common/dates'
 import { isOverdueTask, taskCounts } from '../../work/work'
@@ -52,9 +53,7 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
               {formatDateOrTimestamp(project?.targetDate ?? null) ?? 'No target date'}
             </p>
             <p className="mt-1 text-xs text-stone-500">
-              Supervisor: {project?.supervisorId == null
-                ? 'Unassigned'
-                : users.find((user) => user.id === project.supervisorId)?.name?.trim() || 'Unknown supervisor'}
+              {formatAssignedStudents(studentNames(dashboard.members, users))}
             </p>
           </div>
           <span className="w-fit rounded-full bg-stone-950 px-3 py-1 text-xs font-medium tracking-wide text-stone-50">

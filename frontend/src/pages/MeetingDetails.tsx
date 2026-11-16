@@ -22,6 +22,7 @@ import { PageHeader } from '../components/common/PageHeader'
 import type { StudentOption } from '../components/meetings/suggestionForm'
 import { SuggestionCard } from '../components/meetings/SuggestionCard'
 import { ExtractionSections } from '../components/research/ExtractionSections'
+import { incompleteExtractionIssues } from '../components/research/researchDisplay'
 import { NoActiveProject } from '../components/project/NoActiveProject'
 import { useActiveProject } from '../project/ActiveProjectContext'
 import { meetingBelongsToProject } from '../project/projectSelection'
@@ -615,6 +616,11 @@ export function MeetingDetails() {
                 </div>
 
                 <div className="mt-5">
+                  {incompleteExtractionIssues(researchExtraction).length > 0 ? (
+                    <ul className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900" role="status">
+                      {incompleteExtractionIssues(researchExtraction).map((issue) => <li key={issue}>{issue}</li>)}
+                    </ul>
+                  ) : null}
                   <ExtractionSections extraction={researchExtraction} onChange={setResearchExtraction} />
                 </div>
               </div>

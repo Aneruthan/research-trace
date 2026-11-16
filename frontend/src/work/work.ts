@@ -58,6 +58,46 @@ export function validateTaskDraft(title: string): string | null {
   return null
 }
 
+export type StudentTaskDraft = {
+  title: string
+  description: string
+  dueDate: string
+  status: TaskStatus
+  milestoneId: number | null
+  assigneeId: number
+}
+
+export function studentTaskDraft(studentId: number): StudentTaskDraft {
+  return {
+    title: '',
+    description: '',
+    dueDate: '',
+    status: 'TODO',
+    milestoneId: null,
+    assigneeId: studentId,
+  }
+}
+
+export function validateStudentTask(
+  draft: StudentTaskDraft,
+  options: { studentIsMember: boolean; milestoneIds: number[] },
+): string | null {
+  if (draft.title.trim().length === 0) {
+    return 'Task title is required.'
+  }
+  if (!options.studentIsMember || !Number.isInteger(draft.assigneeId)) {
+    return 'Student must belong to the active project.'
+  }
+  if (draft.milestoneId != null && !options.milestoneIds.includes(draft.milestoneId)) {
+    return 'Milestone must belong to the active project.'
+  }
+  return null
+}
+
+export function studentTaskEmptyMessage(taskCount: number): string | null {
+  return taskCount === 0 ? 'No tasks assigned yet.' : null
+}
+
 export function validateMilestoneDraft(title: string, weight: string): string | null {
   if (title.trim().length === 0) return 'Milestone title is required.'
   if (weight.trim().length > 0 && Number(weight) < 0) return 'Milestone weight cannot be negative.'

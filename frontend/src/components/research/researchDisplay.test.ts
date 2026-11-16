@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ResearchDecision } from '../../api/research'
-import { buildDecisionChains, editExtractionList, extractionOrigin, reviewOutcomeMessage } from './researchDisplay.ts'
+import { buildDecisionChains, editExtractionList, extractionOrigin, incompleteExtractionIssues, reviewOutcomeMessage } from './researchDisplay.ts'
 
 function decision(id: number, supersedesDecisionId: number | null, title = `Decision ${id}`): ResearchDecision {
   return {
@@ -34,6 +34,19 @@ test('buildDecisionChains keeps a decision without successors as a single-item c
 test('buildDecisionChains follows a supersession chain to the end', () => {
   const chains = buildDecisionChains([decision(3, 2), decision(1, null), decision(2, 1), decision(9, null)])
   assert.deepEqual(chains.map((chain) => chain.map((d) => d.id)), [[1, 2, 3], [9]])
+})
+
+test('incomplete extracted items stay visible and name the missing field', () => {
+  const issues = incompleteExtractionIssues({
+    decisions: [{ title: '  ' }],
+    experiments: [{ title: 'Bias audit' }],
+    results: [{ description: '' }],
+  })
+  assert.deepEqual(issues, [
+    'Decision 1 needs a title before it can be accepted.',
+    'Result 1 needs a description before it can be accepted.',
+  ])
+  assert.equal(incompleteExtractionIssues({ decisions: [{ title: 'Keep the baseline' }] }).length, 0)
 })
 
 test('edited extraction keeps the original title and replaces only the edited field', () => {

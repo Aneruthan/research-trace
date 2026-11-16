@@ -28,6 +28,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
@@ -213,13 +214,16 @@ class AcceptedReviewPersistenceTest {
         extraction.setExperiments(java.util.List.of(untitledExperiment));
         extraction.setResults(java.util.List.of(orphan));
 
-        extractionReviewService.reviewExtraction(meetingId, request(ExtractionReviewStatus.ACCEPTED, extraction));
+        assertThatThrownBy(() -> extractionReviewService.reviewExtraction(
+                meetingId, request(ExtractionReviewStatus.ACCEPTED, extraction)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Each decision needs a title");
 
         assertThat(researchDecisionRepository.count()).isZero();
         assertThat(experimentRepository.count()).isZero();
         assertThat(resultRepository.count()).isZero();
         assertThat(researchEventRepository.count()).isZero();
-        assertThat(extractionReviewRepository.count()).isEqualTo(1);
+        assertThat(extractionReviewRepository.count()).isZero();
     }
 
     @Test

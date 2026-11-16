@@ -7,7 +7,7 @@ This repository is the integrated `main` branch. It includes project management 
 ## Architecture
 
 - **Backend:** Spring Boot 4.1.1, Java 17, Spring Data JPA. The running application uses PostgreSQL. Tests use an in-memory H2 database.
-- **Frontend:** React, TypeScript, and Vite. The UI calls `http://localhost:8080` unless `VITE_API_BASE_URL` is set. Pages use project id `1`.
+- **Frontend:** React, TypeScript, and Vite. The UI calls `http://localhost:8080` unless `VITE_API_BASE_URL` is set. The sidebar stores the active project id and every project page uses that id.
 - **Persistence:** `spring.jpa.hibernate.ddl-auto=update` updates the schema on startup. It does not drop existing tables.
 
 ### Module responsibilities
@@ -110,6 +110,15 @@ cd backend
 .\mvnw.cmd test
 ```
 
+Frontend checks, from `frontend`:
+
+```powershell
+npm test
+npm run lint
+npx tsc -b --noEmit
+npm run build
+```
+
 ## Frontend
 
 ```powershell
@@ -127,13 +136,39 @@ cd frontend
 npm run build
 ```
 
+## Database integrity
+
+Hibernate `ddl-auto=update` adds missing nullable columns. It does not add foreign keys. Fresh Docker databases are created from `docker/initdb/01-init.sql`. An existing PostgreSQL database is not modified by that script.
+
+To add indexes, unique email and membership checks, and foreign keys without deleting rows, apply `docker/initdb/02-integrity.sql` yourself. A brand-new Docker database runs it once after the schema script. An existing database volume does not. The script contains no `DELETE`, `TRUNCATE`, or `DROP TABLE`. Do not run it against a database you have not backed up. It was executed on a disposable PostgreSQL 18.1 cluster, not on the existing demo database.
+
+Apply it with `psql` against the database named in `DB_URL`:
+
+```powershell
+psql -d your_database_name -f docker/initdb/02-integrity.sql
+```
+
+Constraints are added `NOT VALID`, so existing orphan rows stay in place and new writes are checked. Unique indexes on lower-cased email and on `(project_id, user_id)` are created only when no duplicates exist. If duplicates exist, that index is skipped and PostgreSQL prints a notice that no rows were changed. The other constraints are still added.
+
+After a clean apply, validate each foreign key. Validation fails while an orphan remains and does not delete the row:
+
+```sql
+ALTER TABLE public.task VALIDATE CONSTRAINT fk_task_milestone;
+```
+
+Repeat that statement for every `fk_*` constraint the script created. A failure names the orphan key. Fix or archive that relationship yourself, then run the statement again. User deletion stays blocked while a membership or an assigned task exists. Deleting a project that still has research records returns 409; archive does not remove that history.
+
+The same disposable cluster covered four cases: a clean database, existing valid rows, existing duplicate emails and memberships, and an existing orphan milestone reference. Valid rows remained. Duplicates skipped only the affected unique index. The orphan row remained, new invalid writes were rejected, and `VALIDATE CONSTRAINT` failed while that orphan was still present.
+
 ## Demo path
 
-This is a script for a stakeholder to execute. It is not a record that the stakeholder has already done so.
+This is a script for a stakeholder to execute. It is not a record that the stakeholder has already done so. There is no authentication.
 
-1. Start PostgreSQL, the backend, and the frontend, with project id `1` existing.
-2. Open **Dashboard**. It loads `GET /api/projects/1/dashboard` and shows project progress, milestones, meetings, and tasks.
-3. Open **Meetings**, then a meeting. Paste realistic notes, for example:
+1. Start PostgreSQL, the backend, and the frontend.
+2. Open **Projects** and create a project, or select one in the sidebar. Optional demo rows are not inserted unless you start the backend with `researchtrace.demo.seed=true`. That flag only adds a missing GreenRoute project and the alex@research.edu student. It does not update existing rows and is off by default.
+3. Open **Students**. Create a student or add an existing one to the selected project.
+4. Open **Dashboard**. It loads the selected project's progress, milestones, meetings, tasks, and overdue count.
+5. Open **Meetings**, then a meeting. Paste realistic notes, for example:
 
 ```text
 ACTION: Compare the baseline and the balanced split
@@ -147,9 +182,9 @@ Experiment: Bias audit
 Metrics: accuracy gap = 0.04
 ```
 
-4. Extract task suggestions. Edit, accept, or reject them. An accepted suggestion becomes a task. Mark a task **COMPLETED** on the **Tasks** page and confirm project progress changes on the Dashboard.
-5. Open **Research Trace**. Extract research information, then save the review as **ACCEPTED**. Decisions, experiments, results, and timeline events should appear from the stored records. **PENDING**, **EDITED**, and **REJECTED** stay in review history and do not create those records.
-6. Supersede an active decision from the Research Trace page when two decisions exist. The earlier decision becomes superseded and the replacement points at it.
+6. Extract task suggestions. Edit, accept, or reject them. An accepted suggestion becomes a task. Create a milestone, assign the task to a project student, and associate the task with the milestone. Mark a task **COMPLETED** on the **Tasks** page and confirm project progress changes on the Dashboard and on the student page.
+7. Open **Research Trace**. Extract research information. An item missing a decision title, an experiment title, or a result description stays visible and names the missing field. Fill that field yourself; the app does not invent it. **Accept** is rejected until the required fields are present. **Save as Edited** stores the edited text. The original extraction stays on the review, and the source reference records `origin:ai`, `origin:edited`, or `origin:unknown`. **PENDING**, **EDITED**, and **REJECTED** stay in review history. Only **ACCEPTED** creates decisions, experiments, and results. Switch projects in the sidebar and confirm the other project's records are not shown. Opening another project's meeting or task returns "not found".
+8. Supersede an active decision from the Research Trace page when two decisions exist. The earlier decision becomes superseded and the replacement points at it.
 
 Expected stored shape after an accepted review that has a decision title, an experiment title, and a result whose experiment name matches that title:
 
@@ -168,20 +203,22 @@ Project and progress:
 - `GET /api/projects/{projectId}/dashboard`
 - `GET /api/projects/{projectId}/progress`
 - `GET /api/projects/{projectId}/milestones`
-- `GET /api/milestones/{milestoneId}/progress`
-- `GET /api/students/{studentId}/progress`
+- `GET /api/projects/{projectId}/milestones/{milestoneId}/progress`
+- `GET /api/projects/{projectId}/students`
+- `GET /api/projects/{projectId}/students/{studentId}/progress`
 - `GET /api/projects/{projectId}/tasks`
-- `PUT /api/tasks/{id}`
+- `POST /api/projects/{projectId}/tasks`
+- `PUT /api/projects/{projectId}/tasks/{taskId}`
 
 Meetings and review:
 
 - `GET /api/projects/{projectId}/meetings`
-- `POST /api/meetings/{meetingId}/task-suggestions/extract`
-- `POST /api/task-suggestions/{id}/accept`
-- `POST /api/task-suggestions/{id}/reject`
-- `POST /api/meetings/{meetingId}/research-extraction`
-- `POST /api/meetings/{meetingId}/review`
-- `GET /api/meetings/{meetingId}/reviews`
+- `POST /api/projects/{projectId}/meetings/{meetingId}/task-suggestions/extract`
+- `POST /api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{suggestionId}/accept`
+- `POST /api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{suggestionId}/reject`
+- `POST /api/projects/{projectId}/meetings/{meetingId}/research-extraction`
+- `POST /api/projects/{projectId}/meetings/{meetingId}/review`
+- `GET /api/projects/{projectId}/meetings/{meetingId}/reviews`
 
 Research records:
 
@@ -204,8 +241,9 @@ More detail is in `docs/task-and-progress-api.md`, `docs/research-traceability-a
 - **Port 8080 already in use.** Stop the other process or the previous backend before `spring-boot:run`.
 - **Frontend "Failed to fetch".** The backend is not running, or the page origin is not allowed. The UI expects the API at `VITE_API_BASE_URL`.
 - **Research extraction returns 503.** Gemini is selected and `GEMINI_API_KEY` is unset. Use stub mode for an offline demo.
-- **Research Trace is empty.** The page reads project `1`. Accept a review only after extraction includes a decision title or an experiment title. A result is stored only when its experiment name matches an experiment in that same extraction.
-- **Tests.** `.\mvnw.cmd test` uses H2. A test failure is not the same as a PostgreSQL login failure.
+- **Research Trace is empty.** Select a project, then accept a review only after each decision has a title, each experiment has a title, and each result has a description. The review screen lists any missing field. A result is stored only when its experiment name matches an experiment in that same extraction.
+- **Tests.** `.\mvnw.cmd test` uses H2. A passing H2 suite does not prove the PostgreSQL migration has been applied.
+- **No login.** The API does not authenticate callers. Do not expose it on a public network.
 
 ## Team
 

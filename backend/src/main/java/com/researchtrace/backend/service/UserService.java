@@ -1,8 +1,12 @@
 package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.model.User;
+import com.researchtrace.backend.repository.ProjectMemberRepository;
+import com.researchtrace.backend.repository.TaskRepository;
 import com.researchtrace.backend.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -14,9 +18,21 @@ import java.util.Optional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final ProjectMemberRepository projectMemberRepository;
+    private final TaskRepository taskRepository;
 
     public UserService(UserRepository userRepository) {
+        this(userRepository, null, null);
+    }
+
+    @Autowired
+    public UserService(
+            UserRepository userRepository,
+            @Nullable ProjectMemberRepository projectMemberRepository,
+            @Nullable TaskRepository taskRepository) {
         this.userRepository = userRepository;
+        this.projectMemberRepository = projectMemberRepository;
+        this.taskRepository = taskRepository;
     }
 
     public List<User> getAllUsers() {
@@ -45,6 +61,14 @@ public class UserService {
     }
 
     public void deleteUser(Long id) {
+        if (projectMemberRepository != null && !projectMemberRepository.findByUserId(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Cannot delete this user because project memberships still exist");
+        }
+        if (taskRepository != null && !taskRepository.findByAssigneeId(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Cannot delete this user because tasks are still assigned to them");
+        }
         userRepository.deleteById(id);
     }
 

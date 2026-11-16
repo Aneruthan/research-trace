@@ -21,6 +21,24 @@ export function editExtractionList<T extends object>(
   return next
 }
 
+export function incompleteExtractionIssues(extraction: {
+  decisions?: Array<{ title?: string | null }> | null
+  experiments?: Array<{ title?: string | null }> | null
+  results?: Array<{ description?: string | null }> | null
+}): string[] {
+  const issues: string[] = []
+  ;(extraction.decisions ?? []).forEach((item, index) => {
+    if (!item.title?.trim()) issues.push(`Decision ${index + 1} needs a title before it can be accepted.`)
+  })
+  ;(extraction.experiments ?? []).forEach((item, index) => {
+    if (!item.title?.trim()) issues.push(`Experiment ${index + 1} needs a title before it can be accepted.`)
+  })
+  ;(extraction.results ?? []).forEach((item, index) => {
+    if (!item.description?.trim()) issues.push(`Result ${index + 1} needs a description before it can be accepted.`)
+  })
+  return issues
+}
+
 export function extractionOrigin(originalJson: string | null | undefined, editedJson: string | null | undefined): 'unknown' | 'ai' | 'edited' {
   if (originalJson == null || originalJson.trim() === '') {
     return 'unknown'

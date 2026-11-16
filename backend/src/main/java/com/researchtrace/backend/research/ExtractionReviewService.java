@@ -57,7 +57,8 @@ public class ExtractionReviewService {
         if (reviewRequest.getStatus() == ExtractionReviewStatus.ACCEPTED && meeting.getProjectId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting is not linked to a project");
         }
-        if (reviewRequest.getStatus() == ExtractionReviewStatus.EDITED) {
+        if (reviewRequest.getStatus() == ExtractionReviewStatus.EDITED
+                || reviewRequest.getStatus() == ExtractionReviewStatus.ACCEPTED) {
             validateExtraction(reviewRequest.getExtraction());
         }
 

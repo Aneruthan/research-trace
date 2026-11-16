@@ -1,35 +1,48 @@
-import { useEffect, useState } from 'react'
-import { archiveProject, createProject, updateProject } from '../api/projects'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { createProject, updateProject } from '../api/projects'
 import { getProjectProgress } from '../api/tasks'
-import type { Project, User } from '../api/types'
-import { getUsers } from '../api/users'
+import type { Project, ProjectMember, User } from '../api/types'
+import { addProjectMember, getProjectMembers, getUsers, removeProjectMember } from '../api/users'
 import { PageHeader } from '../components/common/PageHeader'
 import { formatDateOrTimestamp } from '../components/common/dates'
 import { useActiveProject } from '../project/ActiveProjectContext'
+import { openProjectDestination, projectCardActions } from '../project/projectCard'
 import {
-  archiveConfirmation,
   emptyProjectForm,
   projectToForm,
   toProjectWriteRequest,
   validateProjectForm,
   type ProjectFormValues,
 } from '../project/projectForm'
+import {
+  formatAssignedStudents,
+  hiddenStudentNames,
+  membershipChanges,
+  selectedStudentIds,
+  studentNames,
+  studentUsers,
+  validateStudentSelection,
+} from '../project/projectStudents'
 import { visibleProjects } from '../project/projectSelection'
 
 export function Projects() {
+  const navigate = useNavigate()
   const { projects, loading, error, refreshProjects, selectProject, activeProjectId } = useActiveProject()
   const [users, setUsers] = useState<User[]>([])
   const [usersError, setUsersError] = useState<string | null>(null)
-  const [showArchived, setShowArchived] = useState(false)
   const [progressById, setProgressById] = useState<Record<number, number | null>>({})
+  const [membersByProject, setMembersByProject] = useState<Record<number, ProjectMember[]>>({})
+  const [membersFailed, setMembersFailed] = useState<Record<number, boolean>>({})
+  const [expandedStudents, setExpandedStudents] = useState<Record<number, boolean>>({})
   const [mode, setMode] = useState<'closed' | 'create' | 'edit'>('closed')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<ProjectFormValues>(emptyProjectForm)
+  const [studentIds, setStudentIds] = useState<number[]>([])
+  const prefillEditId = useRef<number | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [archiveTarget, setArchiveTarget] = useState<Project | null>(null)
-  const [archiving, setArchiving] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -57,29 +70,48 @@ export function Projects() {
     const ids = projects.map((project) => project.id).filter((id): id is number => id != null)
     Promise.all(
       ids.map(async (id) => {
-        try {
-          return [id, await getProjectProgress(id, controller.signal)] as const
-        } catch {
-          return [id, null] as const
-        }
+        const [progress, members] = await Promise.all([
+          getProjectProgress(id, controller.signal).catch(() => null),
+          getProjectMembers(id, controller.signal).then(
+            (loaded) => ({ loaded, failed: false }),
+            () => ({ loaded: [] as ProjectMember[], failed: true }),
+          ),
+        ])
+        return [id, progress, members.loaded, members.failed] as const
       }),
     ).then((entries) => {
       if (controller.signal.aborted) {
         return
       }
-      setProgressById(Object.fromEntries(entries))
+      setProgressById(Object.fromEntries(entries.map(([id, progress]) => [id, progress])))
+      setMembersByProject(Object.fromEntries(entries.map(([id, , members]) => [id, members])))
+      setMembersFailed(Object.fromEntries(entries.map(([id, , , failed]) => [id, failed])))
+      const pendingId = prefillEditId.current
+      const pending = pendingId == null ? null : entries.find(([id]) => id === pendingId)
+      if (pending && !pending[3]) {
+        setStudentIds(selectedStudentIds(pending[2]))
+        prefillEditId.current = null
+      }
     })
     return () => controller.abort()
   }, [projects, loading, error])
 
-  const listed = visibleProjects(projects, showArchived)
+  const listed = visibleProjects(projects, false)
+  const students = studentUsers(users)
 
   function openCreate() {
     setMode('create')
     setEditingId(null)
     setForm(emptyProjectForm)
+    setStudentIds([])
     setFormError(null)
     setMessage(null)
+  }
+
+  function openProject(projectId: number) {
+    const destination = openProjectDestination(projectId)
+    selectProject(destination.projectId)
+    navigate(destination.path)
   }
 
   function openEdit(project: Project) {
@@ -89,6 +121,14 @@ export function Projects() {
     setMode('edit')
     setEditingId(project.id)
     setForm(projectToForm(project))
+    const loadedMembers = membersByProject[project.id]
+    if (loadedMembers == null) {
+      prefillEditId.current = project.id
+      setStudentIds([])
+    } else {
+      prefillEditId.current = null
+      setStudentIds(selectedStudentIds(loadedMembers))
+    }
     setFormError(null)
     setMessage(null)
   }
@@ -100,19 +140,44 @@ export function Projects() {
       setFormError(validation)
       return
     }
+    if (mode === 'edit' && editingId != null && membersByProject[editingId] == null && !membersFailed[editingId]) {
+      setFormError('Students are still loading. Wait a moment and save again.')
+      return
+    }
+    const studentError = validateStudentSelection(studentIds, users)
+    if (studentError) {
+      setFormError(studentError)
+      return
+    }
     setSaving(true)
     setFormError(null)
     try {
       const request = toProjectWriteRequest(form)
+      let projectId = editingId
       if (mode === 'edit' && editingId != null) {
         await updateProject(editingId, request)
-        await refreshProjects(editingId)
-        setMessage('Project updated.')
       } else {
         const created = await createProject(request)
-        await refreshProjects(created.id)
-        setMessage('Project created.')
+        projectId = created.id
       }
+      if (projectId == null) {
+        throw new Error('Saved project has no id')
+      }
+      let membershipNote = ''
+      if (mode === 'edit' && membersFailed[projectId]) {
+        membershipNote = ' Student assignments were not changed because members could not be loaded.'
+      } else {
+        const current = mode === 'edit' ? membersByProject[projectId] ?? [] : []
+        const plan = membershipChanges(current, studentIds)
+        for (const userId of plan.addUserIds) {
+          await addProjectMember(projectId, { userId, role: 'STUDENT' })
+        }
+        for (const memberId of plan.removeMembershipIds) {
+          await removeProjectMember(projectId, memberId)
+        }
+      }
+      await refreshProjects(projectId)
+      setMessage(mode === 'edit' ? `Project updated.${membershipNote}` : 'Project created.')
       setMode('closed')
     } catch (cause: unknown) {
       setFormError(cause instanceof Error ? cause.message : 'Could not save the project')
@@ -121,29 +186,11 @@ export function Projects() {
     }
   }
 
-  async function confirmArchive() {
-    if (archiveTarget?.id == null) {
-      return
-    }
-    setArchiving(true)
-    setFormError(null)
-    try {
-      await archiveProject(archiveTarget.id)
-      await refreshProjects()
-      setMessage(`${archiveTarget.name ?? 'Project'} archived. Its records were kept.`)
-      setArchiveTarget(null)
-    } catch (cause: unknown) {
-      setFormError(cause instanceof Error ? cause.message : 'Could not archive the project')
-    } finally {
-      setArchiving(false)
-    }
-  }
-
   return (
     <section>
       <PageHeader
         title="Projects"
-        description="Create and maintain independent research projects. Choose the active project from the sidebar."
+        description="Create and maintain independent research projects. Open a project to work in its dashboard."
       />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -154,14 +201,6 @@ export function Projects() {
         >
           Create project
         </button>
-        <label className="flex items-center gap-2 text-sm text-stone-700">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(event) => setShowArchived(event.target.checked)}
-          />
-          Show archived projects
-        </label>
       </div>
 
       {message ? (
@@ -177,7 +216,7 @@ export function Projects() {
       ) : null}
       {usersError ? (
         <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
-          Supervisors could not be loaded, so names may be missing. {usersError}
+          Students could not be loaded, so names may be missing. {usersError}
         </p>
       ) : null}
 
@@ -185,10 +224,12 @@ export function Projects() {
         <ProjectForm
           mode={mode}
           form={form}
-          users={users}
+          students={students}
+          studentIds={studentIds}
           saving={saving}
           formError={formError}
           onChange={setForm}
+          onStudentIdsChange={setStudentIds}
           onSubmit={(event) => void submitForm(event)}
           onCancel={() => setMode('closed')}
         />
@@ -196,7 +237,7 @@ export function Projects() {
 
       {!loading && !error && listed.length === 0 ? (
         <p className="mt-6 text-sm text-stone-600">
-          {showArchived ? 'No projects yet.' : 'No current projects. Create one, or show archived projects.'}
+          No current projects. Create one to begin.
         </p>
       ) : null}
 
@@ -204,8 +245,10 @@ export function Projects() {
         <ul className="mt-6 divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
           {listed.map((project) => {
             const progress = project.id == null ? null : progressById[project.id]
-            const supervisor = users.find((user) => user.id === project.supervisorId)
+            const names = studentNames(project.id == null ? [] : membersByProject[project.id] ?? [], users)
+            const expanded = project.id != null && expandedStudents[project.id] === true
             const isActive = project.id === activeProjectId
+            const actions = projectCardActions(project)
             return (
               <li key={project.id ?? project.name} className="px-4 py-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -230,40 +273,40 @@ export function Projects() {
                       {' – '}
                       {formatDateOrTimestamp(project.targetDate) ?? 'No target date'}
                     </p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      Supervisor: {supervisor?.name ?? (project.supervisorId == null ? 'Unassigned' : 'Unknown supervisor')}
-                    </p>
+                    <p className="mt-1 text-xs text-stone-500">{formatAssignedStudents(names, expanded)}</p>
+                    {hiddenStudentNames(names).length > 0 && project.id != null ? (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs font-medium text-stone-800 underline"
+                        onClick={() => setExpandedStudents((current) => ({
+                          ...current,
+                          [project.id as number]: !expanded,
+                        }))}
+                      >
+                        {expanded ? 'Show fewer students' : 'Show all students'}
+                      </button>
+                    ) : null}
                     <p className="mt-1 text-xs text-stone-500">
                       Progress: {progress == null ? 'Unavailable' : `${progress}%`}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    {project.status !== 'ARCHIVED' && project.id != null ? (
+                  <div className="flex flex-wrap gap-2 sm:shrink-0">
+                    {actions.includes('Open') && project.id != null ? (
                       <button
                         type="button"
-                        className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-800"
-                        onClick={() => selectProject(project.id as number)}
+                        className="rounded-md bg-stone-950 px-3 py-2 text-sm font-medium text-white"
+                        onClick={() => openProject(project.id as number)}
                       >
                         Open
                       </button>
                     ) : null}
-                    <button
-                      type="button"
-                      className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-800"
-                      onClick={() => openEdit(project)}
-                    >
-                      Edit
-                    </button>
-                    {project.status !== 'ARCHIVED' ? (
+                    {actions.includes('Edit') ? (
                       <button
                         type="button"
-                        className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-800"
-                        onClick={() => {
-                          setFormError(null)
-                          setArchiveTarget(project)
-                        }}
+                        className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-900"
+                        onClick={() => openEdit(project)}
                       >
-                        Archive
+                        Edit
                       </button>
                     ) : null}
                   </div>
@@ -274,33 +317,6 @@ export function Projects() {
         </ul>
       ) : null}
 
-      {archiveTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6" role="dialog" aria-modal="true" aria-labelledby="archive-title">
-            <h2 id="archive-title" className="text-base font-semibold text-stone-950">Archive project</h2>
-            <p className="mt-2 text-sm text-stone-600">{archiveConfirmation(archiveTarget.name)}</p>
-            {formError ? <p className="mt-3 text-sm text-red-700" role="alert">{formError}</p> : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-stone-300 px-3 py-1.5 text-sm"
-                onClick={() => setArchiveTarget(null)}
-                disabled={archiving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-stone-950 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-                onClick={() => void confirmArchive()}
-                disabled={archiving}
-              >
-                {archiving ? 'Archiving…' : 'Archive project'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   )
 }
@@ -308,19 +324,23 @@ export function Projects() {
 function ProjectForm({
   mode,
   form,
-  users,
+  students,
+  studentIds,
   saving,
   formError,
   onChange,
+  onStudentIdsChange,
   onSubmit,
   onCancel,
 }: {
   mode: 'create' | 'edit'
   form: ProjectFormValues
-  users: User[]
+  students: User[]
+  studentIds: number[]
   saving: boolean
   formError: string | null
   onChange: (values: ProjectFormValues) => void
+  onStudentIdsChange: (ids: number[]) => void
   onSubmit: (event: React.FormEvent) => void
   onCancel: () => void
 }) {
@@ -370,20 +390,32 @@ function ProjectForm({
           />
         </Field>
       </div>
-      <Field label="Supervisor">
-        <select
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-          value={form.supervisorId}
-          onChange={(event) => onChange({ ...form, supervisorId: event.target.value })}
-        >
-          <option value="">Unassigned</option>
-          {users.filter((user) => user.id != null).map((user) => (
-            <option key={user.id} value={user.id ?? ''}>
-              {user.name ?? 'Unnamed user'}{user.role ? ` (${user.role})` : ''}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <fieldset className="rounded-md border border-stone-200 p-3">
+        <legend className="px-1 text-xs font-medium text-stone-700">Students</legend>
+        <p className="text-xs text-stone-500">Select one or more existing students. Leave this empty for an unassigned project.</p>
+        {students.length === 0 ? (
+          <p className="mt-2 text-sm text-stone-600">No students exist yet. Create them on the Students page, then assign them here.</p>
+        ) : (
+          <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+            {students.map((student) => {
+              const id = student.id as number
+              const checked = studentIds.includes(id)
+              return (
+                <label key={id} className="flex items-center gap-2 text-sm text-stone-800">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onStudentIdsChange(
+                      checked ? studentIds.filter((studentId) => studentId !== id) : [...studentIds, id],
+                    )}
+                  />
+                  {student.name ?? 'Unnamed student'}
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </fieldset>
       <div className="flex gap-2">
         <button
           type="submit"

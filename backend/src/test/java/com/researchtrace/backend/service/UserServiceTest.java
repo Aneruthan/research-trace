@@ -2,6 +2,8 @@ package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.model.User;
 import com.researchtrace.backend.model.UserRole;
+import com.researchtrace.backend.repository.ProjectMemberRepository;
+import com.researchtrace.backend.repository.TaskRepository;
 import com.researchtrace.backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +28,12 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
+    private TaskRepository taskRepository;
 
     private UserService userService;
 
@@ -72,6 +81,17 @@ class UserServiceTest {
         assertThat(updated.getId()).isEqualTo(5L);
         assertThat(updated.getName()).isEqualTo("Alex Johnson");
         verify(userRepository).save(existing);
+    }
+
+    @Test
+    void deleteRefusesToRemoveAUserWhoStillHasAMembershipOrAssignedTasks() {
+        UserService guarded = new UserService(userRepository, projectMemberRepository, taskRepository);
+        when(projectMemberRepository.findByUserId(5L)).thenReturn(List.of(new com.researchtrace.backend.model.ProjectMember()));
+
+        assertThatThrownBy(() -> guarded.deleteUser(5L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(userRepository, never()).deleteById(5L);
     }
 
     @Test

@@ -233,7 +233,7 @@ export function Students() {
                     setEditEmail(student.email ?? '')
                   }}>Edit</button>
                   {student.membershipId != null && activeProjectId != null ? (
-                    <button type="button" className="rounded-md border border-stone-300 px-2 py-1 text-xs" onClick={() => void updateProjectMember(activeProjectId, student.membershipId as number, { role: student.role === 'PROFESSOR' ? 'STUDENT' : 'PROFESSOR' }).then(() => reload())}>
+                    <button type="button" className="rounded-md border border-stone-300 px-2 py-1 text-xs" onClick={() => void updateProjectMember(activeProjectId, student.membershipId as number, { role: student.role === 'PROFESSOR' ? 'STUDENT' : 'PROFESSOR' }).then(() => reload()).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not change role'))}>
                       Role: {student.role}
                     </button>
                   ) : null}
