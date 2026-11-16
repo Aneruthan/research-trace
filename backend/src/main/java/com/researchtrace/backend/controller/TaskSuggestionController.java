@@ -4,12 +4,18 @@ import com.researchtrace.backend.dto.AcceptTaskSuggestionRequest;
 import com.researchtrace.backend.model.Task;
 import com.researchtrace.backend.model.TaskSuggestion;
 import com.researchtrace.backend.service.TaskSuggestionService;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions")
 public class TaskSuggestionController {
 
     private final TaskSuggestionService taskSuggestionService;
@@ -18,34 +24,43 @@ public class TaskSuggestionController {
         this.taskSuggestionService = taskSuggestionService;
     }
 
-    @PostMapping("/meetings/{meetingId}/task-suggestions/extract")
-    public List<TaskSuggestion> extractTaskSuggestions(@PathVariable Long meetingId) {
-        return taskSuggestionService.extract(meetingId);
+    @PostMapping("/extract")
+    public List<TaskSuggestion> extractTaskSuggestions(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId) {
+        return taskSuggestionService.extract(projectId, meetingId);
     }
 
-    @GetMapping("/meetings/{meetingId}/task-suggestions")
-    public List<TaskSuggestion> getTaskSuggestionsByMeeting(@PathVariable Long meetingId) {
-        return taskSuggestionService.listByMeeting(meetingId);
+    @GetMapping
+    public List<TaskSuggestion> getTaskSuggestionsByMeeting(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId) {
+        return taskSuggestionService.listByMeeting(projectId, meetingId);
     }
 
-    @PutMapping("/task-suggestions/{id}")
+    @PutMapping("/{suggestionId}")
     public TaskSuggestion updateTaskSuggestion(
-            @PathVariable Long id,
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId,
+            @PathVariable Long suggestionId,
             @RequestBody AcceptTaskSuggestionRequest request) {
-
-        return taskSuggestionService.update(id, request);
+        return taskSuggestionService.update(projectId, meetingId, suggestionId, request);
     }
 
-    @PostMapping("/task-suggestions/{id}/accept")
+    @PostMapping("/{suggestionId}/accept")
     public Task acceptTaskSuggestion(
-            @PathVariable Long id,
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId,
+            @PathVariable Long suggestionId,
             @RequestBody(required = false) AcceptTaskSuggestionRequest request) {
-
-        return taskSuggestionService.accept(id, request);
+        return taskSuggestionService.accept(projectId, meetingId, suggestionId, request);
     }
 
-    @PostMapping("/task-suggestions/{id}/reject")
-    public TaskSuggestion rejectTaskSuggestion(@PathVariable Long id) {
-        return taskSuggestionService.reject(id);
+    @PostMapping("/{suggestionId}/reject")
+    public TaskSuggestion rejectTaskSuggestion(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId,
+            @PathVariable Long suggestionId) {
+        return taskSuggestionService.reject(projectId, meetingId, suggestionId);
     }
 }

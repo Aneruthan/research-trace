@@ -36,7 +36,7 @@ test('updateMilestone sends the edited milestone to its own URL', async () => {
     })
 
     assert.equal(capturedMethod, 'PUT')
-    assert.ok(capturedUrl.endsWith('/api/milestones/11'))
+    assert.ok(capturedUrl.endsWith('/api/projects/1/milestones/11'))
     assert.match(capturedBody, /"title":"Revised milestone"/)
     assert.match(capturedBody, /"weight":2.5/)
     assert.equal(saved.id, 11)

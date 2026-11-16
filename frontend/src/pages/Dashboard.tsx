@@ -1,13 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getProjectDashboard } from '../api/dashboard'
 import type { ProjectDashboard, User } from '../api/types'
 import { getUsers } from '../api/users'
 import { PageHeader } from '../components/common/PageHeader'
 import { DashboardView } from '../components/dashboard/DashboardView'
-
-const SELECTED_PROJECT_ID = 1
+import { NoActiveProject } from '../components/project/NoActiveProject'
+import { useActiveProject } from '../project/ActiveProjectContext'
+import { isCurrentProjectResponse } from '../project/projectSelection'
 
 export function Dashboard() {
+  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
+  const activeProjectIdRef = useRef(activeProjectId)
+  useEffect(() => {
+    activeProjectIdRef.current = activeProjectId
+  }, [activeProjectId])
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [usersUnavailable, setUsersUnavailable] = useState(false)
@@ -16,46 +22,55 @@ export function Dashboard() {
 
   useEffect(() => {
     const controller = new AbortController()
-    let active = true
+    setDashboard(null)
+    setError(null)
+    if (projectsLoading) {
+      setLoading(true)
+      return () => controller.abort()
+    }
+    if (projectsError || activeProjectId == null) {
+      setLoading(false)
+      return () => controller.abort()
+    }
+    const projectId = activeProjectId
 
     function load() {
       Promise.all([
-        getProjectDashboard(SELECTED_PROJECT_ID, controller.signal),
+        getProjectDashboard(projectId, controller.signal),
         getUsers(controller.signal).catch(() => null),
       ])
         .then(([data, loadedUsers]) => {
-          if (active && !controller.signal.aborted) {
-            setDashboard(data)
-            setUsers(loadedUsers ?? [])
-            setUsersUnavailable(loadedUsers == null)
-            setError(null)
+          if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+            return
           }
+          setDashboard(data)
+          setUsers(loadedUsers ?? [])
+          setUsersUnavailable(loadedUsers == null)
+          setError(null)
         })
         .catch((cause: unknown) => {
-          if (!active || controller.signal.aborted) {
+          if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
             return
           }
           setError(cause instanceof Error ? cause.message : 'Could not load the dashboard')
         })
         .finally(() => {
-          if (active && !controller.signal.aborted) {
+          if (!controller.signal.aborted && isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
             setLoading(false)
           }
         })
     }
 
     setLoading(true)
-    setError(null)
     load()
     window.addEventListener('researchtrace-progress-changed', load)
     window.addEventListener('focus', load)
     return () => {
-      active = false
       controller.abort()
       window.removeEventListener('researchtrace-progress-changed', load)
       window.removeEventListener('focus', load)
     }
-  }, [])
+  }, [activeProjectId, projectsLoading, projectsError])
 
   return (
     <section>
@@ -63,7 +78,12 @@ export function Dashboard() {
         title="Dashboard"
         description="Project progress, student progress, milestones, and tasks for the selected research project."
       />
-      {loading ? <p className="mt-6 text-sm text-stone-600">Loading project {SELECTED_PROJECT_ID}…</p> : null}
+      {projectsLoading || (loading && activeProjectId != null) ? (
+        <p className="mt-6 text-sm text-stone-600">Loading the selected project…</p>
+      ) : null}
+      {!projectsLoading && (projectsError || activeProjectId == null) ? (
+        <NoActiveProject loading={false} error={projectsError} />
+      ) : null}
       {!loading && error ? (
         <p className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
           {error}

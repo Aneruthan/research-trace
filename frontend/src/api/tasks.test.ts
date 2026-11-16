@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  getProjectTask,
   updateTaskStatus,
   type Task,
 } from './tasks.ts'
@@ -33,7 +34,7 @@ test('updateTaskStatus sends PUT to /api/tasks/:id with exact task id in URL and
     const result = await updateTaskStatus(taskA, 'COMPLETED')
 
     assert.strictEqual(capturedMethod, 'PUT')
-    assert(capturedUrl.endsWith('/api/tasks/42'))
+    assert(capturedUrl.endsWith('/api/projects/1/tasks/42'))
     assert(!capturedUrl.includes('""'))
     assert.strictEqual(result.id, 42)
     assert.strictEqual(result.status, 'COMPLETED')
@@ -74,7 +75,7 @@ test('Req 1 & 2: Updating task A in a list of [A, B, C] updates ONLY task A, lea
 
     assert.strictEqual(calls.length, 1)
     assert.strictEqual(calls[0].id, 10)
-    assert(calls[0].url.endsWith('/api/tasks/10'))
+    assert(calls[0].url.endsWith('/api/projects/1/tasks/10'))
 
     // Verify task A is updated
     assert.strictEqual(updatedList[0].id, 10)
@@ -112,8 +113,8 @@ test('Req 4: First item in task list can be updated without affecting other item
 
     // Update first task
     await updateTaskStatus(tasks[0], 'IN_PROGRESS')
-    assert(calledUrl.endsWith('/api/tasks/2'), 'Must call /api/tasks/2 for first task')
-    assert(!calledUrl.endsWith('/api/tasks/5'), 'Must NEVER call last task ID (5) when updating first task')
+    assert(calledUrl.endsWith('/api/projects/1/tasks/2'), 'Must call /api/projects/1/tasks/2 for first task')
+    assert(!calledUrl.endsWith('/api/projects/1/tasks/5'), 'Must NEVER call last task ID (5) when updating first task')
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -141,8 +142,8 @@ test('Req 5: Last item in task list can be updated without affecting first item'
 
     // Update last task
     await updateTaskStatus(tasks[tasks.length - 1], 'COMPLETED')
-    assert(calledUrl.endsWith('/api/tasks/5'), 'Must call /api/tasks/5 for last task')
-    assert(!calledUrl.endsWith('/api/tasks/2'), 'Must NEVER call first task ID (2) when updating last task')
+    assert(calledUrl.endsWith('/api/projects/1/tasks/5'), 'Must call /api/projects/1/tasks/5 for last task')
+    assert(!calledUrl.endsWith('/api/projects/1/tasks/2'), 'Must NEVER call first task ID (2) when updating last task')
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -197,6 +198,26 @@ test('Req 14: Failed API update rejects and leaves previous state unchanged', as
     assert(caughtError !== null)
     // Verify state remained IN_PROGRESS
     assert.strictEqual(taskList[0].status, 'IN_PROGRESS')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('getProjectTask requests the task inside its project', async () => {
+  const originalFetch = globalThis.fetch
+  let capturedUrl = ''
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    capturedUrl = String(input)
+    return new Response(JSON.stringify({ id: 42, projectId: 2, title: 'Route check', status: 'TODO' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+
+  try {
+    const task = await getProjectTask(2, 42)
+    assert.match(capturedUrl, /\/api\/projects\/2\/tasks\/42$/)
+    assert.equal(task.projectId, 2)
   } finally {
     globalThis.fetch = originalFetch
   }

@@ -26,7 +26,20 @@ export type Project = {
   id: number | null
   name: string | null
   description: string | null
+  objectives: string | null
+  startDate: string | null
+  targetDate: string | null
+  supervisorId: number | null
   status: ProjectStatus | null
+}
+
+export type ProjectWriteRequest = {
+  name: string
+  description: string | null
+  objectives: string | null
+  startDate: string | null
+  targetDate: string | null
+  supervisorId: number | null
 }
 
 export type ProjectMember = {

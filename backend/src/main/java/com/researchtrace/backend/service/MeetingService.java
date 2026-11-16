@@ -82,6 +82,15 @@ public class MeetingService {
         return meetingRepository.findById(id);
     }
 
+    public Meeting getMeetingForProject(Long projectId, Long meetingId) {
+        Meeting meeting = meetingRepository.findById(meetingId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
+        if (projectId == null || !projectId.equals(meeting.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found");
+        }
+        return meeting;
+    }
+
     public Meeting createMeeting(Long projectId, Meeting meeting) {
         if (projectId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Project ID is required");
@@ -102,6 +111,11 @@ public class MeetingService {
         meeting.setId(null);
         meeting.setProjectId(projectId);
         return meetingRepository.save(meeting);
+    }
+
+    public Meeting updateMeeting(Long projectId, Long id, Meeting update) {
+        getMeetingForProject(projectId, id);
+        return updateMeeting(id, update);
     }
 
     public Meeting updateMeeting(Long id, Meeting update) {
@@ -161,7 +175,7 @@ public class MeetingService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + id));
 
         if (expectedProjectId != null && !expectedProjectId.equals(meeting.getProjectId())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting does not belong to project: " + expectedProjectId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found");
         }
 
         // Safety check: preserve referential integrity and research provenance.

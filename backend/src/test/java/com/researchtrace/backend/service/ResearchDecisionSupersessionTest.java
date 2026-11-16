@@ -11,6 +11,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -68,7 +69,7 @@ class ResearchDecisionSupersessionTest {
 
         assertThatThrownBy(() -> researchDecisionService.supersede(PROJECT_ID, previous.getId(), otherProject.getId()))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("same project");
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
         assertThat(researchDecisionRepository.findById(previous.getId()).orElseThrow().getStatus())
             .isEqualTo(ResearchDecisionStatus.ACTIVE);
         assertThat(researchDecisionRepository.findById(otherProject.getId()).orElseThrow().getSupersedesDecisionId())

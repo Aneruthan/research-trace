@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface ResearchEventRepository extends JpaRepository<ResearchEvent, Long> {
 
+    boolean existsByProjectId(Long projectId);
+
     List<ResearchEvent> findByProjectIdOrderByOccurredAtAsc(Long projectId);
 
     List<ResearchEvent> findByProjectIdOrderByOccurredAtAscIdAsc(Long projectId);

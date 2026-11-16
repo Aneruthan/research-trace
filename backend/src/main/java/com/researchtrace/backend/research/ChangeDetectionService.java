@@ -59,7 +59,7 @@ public class ChangeDetectionService {
             meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + meetingId));
             if (!Objects.equals(meeting.getProjectId(), projectId)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting does not belong to project " + projectId);
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + meetingId);
             }
         }
 
@@ -178,7 +178,7 @@ public class ChangeDetectionService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Research change not found: " + changeId));
 
         if (!Objects.equals(change.getProjectId(), projectId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Change does not belong to project " + projectId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Research change not found: " + changeId);
         }
 
         change.setStatus(newStatus);

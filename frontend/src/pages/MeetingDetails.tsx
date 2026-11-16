@@ -22,10 +22,14 @@ import { PageHeader } from '../components/common/PageHeader'
 import type { StudentOption } from '../components/meetings/suggestionForm'
 import { SuggestionCard } from '../components/meetings/SuggestionCard'
 import { ExtractionSections } from '../components/research/ExtractionSections'
+import { NoActiveProject } from '../components/project/NoActiveProject'
+import { useActiveProject } from '../project/ActiveProjectContext'
+import { meetingBelongsToProject } from '../project/projectSelection'
 
 type ExtractionTab = 'tasks' | 'research'
 
 export function MeetingDetails() {
+  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
   const { meetingId: meetingIdParam } = useParams()
   const meetingId = Number(meetingIdParam)
   const meetingIdIsValid = Number.isInteger(meetingId) && meetingId > 0
@@ -64,10 +68,14 @@ export function MeetingDetails() {
   const [editError, setEditError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (meeting?.projectId == null) {
+    if (!meetingBelongsToProject(meeting?.projectId, activeProjectId)) {
+      setStudents([])
       return
     }
-    const projectId = meeting.projectId
+    const projectId = meeting?.projectId
+    if (projectId == null) {
+      return
+    }
     const controller = new AbortController()
     Promise.all([
       getProjectMembers(projectId, controller.signal),
@@ -96,7 +104,7 @@ export function MeetingDetails() {
         setStudentsUnavailable(true)
       })
     return () => controller.abort()
-  }, [meeting?.projectId])
+  }, [meeting?.projectId, activeProjectId])
 
   function startEditing() {
     if (!meeting) return
@@ -129,7 +137,11 @@ export function MeetingDetails() {
     setActionMessage(null)
 
     try {
-      const updated = await updateMeeting(meetingId, {
+      if (activeProjectId == null) {
+        setEditError('Select a project before editing a meeting.')
+        return
+      }
+      const updated = await updateMeeting(activeProjectId, meetingId, {
         title: editTitle.trim(),
         meetingDate: editDate,
         notes: editNotes.trim() || undefined,
@@ -145,10 +157,10 @@ export function MeetingDetails() {
   }
 
   const loadResearchReviews = useCallback(async (signal?: AbortSignal) => {
-    if (!meetingIdIsValid) return
+    if (!meetingIdIsValid || activeProjectId == null) return
     setResearchReviewsLoading(true)
     try {
-      const reviews = await getResearchReviews(meetingId, signal)
+      const reviews = await getResearchReviews(activeProjectId, meetingId, signal)
       if (!signal?.aborted) {
         setResearchReviews(reviews)
       }
@@ -159,27 +171,52 @@ export function MeetingDetails() {
         setResearchReviewsLoading(false)
       }
     }
-  }, [meetingId, meetingIdIsValid])
+  }, [meetingId, meetingIdIsValid, activeProjectId])
 
   useEffect(() => {
+    if (projectsLoading) {
+      setMeetingLoading(true)
+      return
+    }
     if (!meetingIdIsValid) {
       setMeetingLoading(false)
       setSuggestionsLoading(false)
       setMeetingError('Meeting id is not valid')
       return
     }
+    if (projectsError || activeProjectId == null) {
+      setMeeting(null)
+      setSuggestions([])
+      setMeetingLoading(false)
+      setSuggestionsLoading(false)
+      return
+    }
 
     const controller = new AbortController()
+    const projectId = activeProjectId
+    setMeeting(null)
+    setSuggestions([])
     setMeetingLoading(true)
     setSuggestionsLoading(true)
     setMeetingError(null)
     setSuggestionsError(null)
 
-    getMeeting(meetingId, controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setMeeting(data)
+    getMeeting(projectId, meetingId, controller.signal)
+      .then(async (data) => {
+        if (controller.signal.aborted) {
+          return
         }
+        setMeeting(data)
+        if (!meetingBelongsToProject(data.projectId, projectId)) {
+          setSuggestions([])
+          setSuggestionsLoading(false)
+          return
+        }
+        const loaded = await getTaskSuggestions(projectId, meetingId, controller.signal)
+        if (!controller.signal.aborted) {
+          setSuggestions(loaded)
+        }
+        await loadResearchReviews(controller.signal)
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) {
@@ -190,34 +227,16 @@ export function MeetingDetails() {
       .finally(() => {
         if (!controller.signal.aborted) {
           setMeetingLoading(false)
-        }
-      })
-
-    getTaskSuggestions(meetingId, controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setSuggestions(data)
-        }
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) {
-          return
-        }
-        setSuggestionsError(cause instanceof Error ? cause.message : 'Could not load task suggestions')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
           setSuggestionsLoading(false)
         }
       })
 
-    loadResearchReviews(controller.signal)
-
     return () => controller.abort()
-  }, [meetingId, meetingIdIsValid, loadResearchReviews])
+  }, [meetingId, meetingIdIsValid, loadResearchReviews, activeProjectId, projectsLoading, projectsError])
 
   async function refreshSuggestions() {
-    const data = await getTaskSuggestions(meetingId)
+    if (activeProjectId == null) return
+    const data = await getTaskSuggestions(activeProjectId, meetingId)
     setSuggestions(data)
     setSuggestionsError(null)
   }
@@ -227,7 +246,8 @@ export function MeetingDetails() {
     setActionError(null)
     setActionMessage(null)
     try {
-      await extractTaskSuggestions(meetingId)
+      if (activeProjectId == null) return
+      await extractTaskSuggestions(activeProjectId, meetingId)
       await refreshSuggestions()
       setActionMessage('Task suggestions updated from the meeting notes.')
     } catch (cause: unknown) {
@@ -240,7 +260,8 @@ export function MeetingDetails() {
   async function handleSaveTask(suggestionId: number, update: SuggestionUpdate) {
     setActionError(null)
     setActionMessage(null)
-    await updateTaskSuggestion(suggestionId, update)
+    if (activeProjectId == null) return
+    await updateTaskSuggestion(activeProjectId, meetingId, suggestionId, update)
     await refreshSuggestions()
     setActionMessage('Suggestion updated.')
   }
@@ -248,7 +269,8 @@ export function MeetingDetails() {
   async function handleAcceptTask(suggestionId: number) {
     setActionError(null)
     setActionMessage(null)
-    await acceptTaskSuggestion(suggestionId)
+    if (activeProjectId == null) return
+    await acceptTaskSuggestion(activeProjectId, meetingId, suggestionId)
     await refreshSuggestions()
     setActionMessage('Suggestion accepted.')
   }
@@ -256,7 +278,8 @@ export function MeetingDetails() {
   async function handleRejectTask(suggestionId: number) {
     setActionError(null)
     setActionMessage(null)
-    await rejectTaskSuggestion(suggestionId)
+    if (activeProjectId == null) return
+    await rejectTaskSuggestion(activeProjectId, meetingId, suggestionId)
     await refreshSuggestions()
     setActionMessage('Suggestion rejected.')
   }
@@ -267,7 +290,8 @@ export function MeetingDetails() {
     setActionError(null)
     setActionMessage(null)
     try {
-      const data = await extractResearch(meetingId)
+      if (activeProjectId == null) return
+      const data = await extractResearch(activeProjectId, meetingId)
       setResearchExtraction(data)
       setActionMessage('Research entities extracted. Review suggestions below before persisting.')
     } catch (cause: unknown) {
@@ -283,7 +307,8 @@ export function MeetingDetails() {
     setActionError(null)
     setActionMessage(null)
     try {
-      await submitResearchReview(meetingId, status, researchExtraction)
+      if (activeProjectId == null) return
+      await submitResearchReview(activeProjectId, meetingId, status, researchExtraction)
       setResearchExtraction(null)
       await loadResearchReviews()
       setActionMessage(
@@ -305,15 +330,23 @@ export function MeetingDetails() {
       </Link>
       <div className="mt-4">
         <PageHeader
-          title={meeting?.title ?? 'Meeting'}
+          title={meetingBelongsToProject(meeting?.projectId, activeProjectId) ? (meeting?.title ?? 'Meeting') : 'Meeting'}
           description="Transcript, extracted task suggestions, and research traceability."
         />
       </div>
 
-      {meetingLoading ? <p className="mt-6 text-sm text-stone-600">Loading meeting…</p> : null}
+      {projectsLoading || meetingLoading ? <p className="mt-6 text-sm text-stone-600">Loading meeting…</p> : null}
+      {!projectsLoading && (projectsError || activeProjectId == null) ? (
+        <NoActiveProject loading={false} error={projectsError} />
+      ) : null}
       {!meetingLoading && meetingError ? <Alert message={meetingError} /> : null}
+      {!projectsLoading && !meetingLoading && !meetingError && meeting && !meetingBelongsToProject(meeting.projectId, activeProjectId) ? (
+        <p className="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+          This meeting belongs to a different project. Open Meetings for the active project, or switch projects before viewing it.
+        </p>
+      ) : null}
 
-      {!meetingLoading && !meetingError && meeting ? (
+      {!projectsLoading && !meetingLoading && !meetingError && meeting && meetingBelongsToProject(meeting.projectId, activeProjectId) ? (
         <article className="mt-6 rounded-lg border border-stone-200 bg-white p-5">
           {!isEditing ? (
             <>

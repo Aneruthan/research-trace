@@ -8,4 +8,6 @@ import java.util.List;
 public interface MeetingRepository extends JpaRepository<Meeting, Long> {
 
     List<Meeting> findByProjectId(Long projectId);
+
+    boolean existsByProjectId(Long projectId);
 }

@@ -13,6 +13,8 @@ public interface TaskSuggestionRepository extends JpaRepository<TaskSuggestion, 
 
     List<TaskSuggestion> findByProjectIdAndStatus(Long projectId, TaskSuggestionStatus status);
 
+    boolean existsByProjectId(Long projectId);
+
     @Transactional
     void deleteByMeetingIdAndStatus(Long meetingId, TaskSuggestionStatus status);
 }

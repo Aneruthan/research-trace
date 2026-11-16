@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface ResearchChangeRepository extends JpaRepository<ResearchChange, Long> {
 
+    boolean existsByProjectId(Long projectId);
+
     List<ResearchChange> findByProjectIdOrderByDetectedAtDesc(Long projectId);
 
     List<ResearchChange> findByProjectIdAndStatusOrderByDetectedAtDesc(Long projectId, ResearchChangeStatus status);

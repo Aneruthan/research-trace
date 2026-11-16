@@ -46,17 +46,17 @@ class ApiExceptionHandlerTest {
 
     @Test
     void serviceRejectionReturnsItsReason() throws Exception {
-        when(milestoneService.updateMilestone(eq(5L), any(MilestoneUpdateRequest.class)))
+        when(milestoneService.updateForProject(eq(1L), eq(5L), any(MilestoneUpdateRequest.class)))
             .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Milestone weight cannot be negative"));
 
-        mockMvc.perform(put("/api/milestones/5")
+        mockMvc.perform(put("/api/projects/1/milestones/5")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Pilot\",\"weight\":-1}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.status").value(400))
             .andExpect(jsonPath("$.error").value("Bad Request"))
             .andExpect(jsonPath("$.message").value("Milestone weight cannot be negative"))
-            .andExpect(jsonPath("$.path").value("/api/milestones/5"));
+            .andExpect(jsonPath("$.path").value("/api/projects/1/milestones/5"));
     }
 
     @Test

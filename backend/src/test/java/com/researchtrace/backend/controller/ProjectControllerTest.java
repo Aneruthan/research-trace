@@ -14,6 +14,7 @@ import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
 import com.researchtrace.backend.model.Result;
 import com.researchtrace.backend.model.Task;
+import com.researchtrace.backend.model.TaskHistory;
 import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.service.MeetingService;
 import com.researchtrace.backend.service.MilestoneService;
@@ -25,16 +26,27 @@ import com.researchtrace.backend.service.ResearchQueryService;
 import com.researchtrace.backend.service.TaskService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -68,6 +80,37 @@ class ProjectControllerTest {
 
     @MockitoBean
     private ResearchQueryService researchQueryService;
+
+    @Test
+    void createsAProject() throws Exception {
+        Project project = new Project();
+        project.setId(4L);
+        project.setName("GreenRoute");
+        project.setStatus(ProjectStatus.ACTIVE);
+        when(projectService.createProject(any())).thenReturn(project);
+
+        mockMvc.perform(post("/api/projects")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"GreenRoute\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(4))
+            .andExpect(jsonPath("$.name").value("GreenRoute"))
+            .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void archivesAProjectWithoutRemovingIt() throws Exception {
+        Project project = new Project();
+        project.setId(4L);
+        project.setName("GreenRoute");
+        project.setStatus(ProjectStatus.ARCHIVED);
+        when(projectService.archiveProject(4L)).thenReturn(project);
+
+        mockMvc.perform(post("/api/projects/4/archive"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("ARCHIVED"))
+            .andExpect(jsonPath("$.name").value("GreenRoute"));
+    }
 
     @Test
     void returnsProjectProgress() throws Exception {
@@ -142,6 +185,43 @@ class ProjectControllerTest {
         mockMvc.perform(get("/api/projects/1/meetings"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].title").value("Weekly sync"));
+    }
+
+    @Test
+    void returnsAMeetingOnlyForItsProject() throws Exception {
+        Meeting meeting = new Meeting();
+        meeting.setId(21L);
+        meeting.setProjectId(1L);
+        meeting.setTitle("Weekly sync");
+        when(meetingService.getMeetingForProject(1L, 21L)).thenReturn(meeting);
+        when(meetingService.getMeetingForProject(2L, 21L))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
+
+        mockMvc.perform(get("/api/projects/1/meetings/21"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Weekly sync"))
+            .andExpect(jsonPath("$.projectId").value(1));
+        mockMvc.perform(get("/api/projects/2/meetings/21"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void returnsATaskOnlyForItsProject() throws Exception {
+        Task task = new Task();
+        task.setId(500L);
+        task.setProjectId(1L);
+        task.setTitle("Run Qwen baseline");
+        task.setStatus(TaskStatus.TODO);
+        when(taskService.getTaskForProject(1L, 500L)).thenReturn(task);
+        when(taskService.getTaskForProject(2L, 500L))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+
+        mockMvc.perform(get("/api/projects/1/tasks/500"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(500))
+            .andExpect(jsonPath("$.projectId").value(1));
+        mockMvc.perform(get("/api/projects/2/tasks/500"))
+            .andExpect(status().isNotFound());
     }
 
     @Test
@@ -229,5 +309,93 @@ class ProjectControllerTest {
         mockMvc.perform(get("/api/projects/2/research-decisions"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void unscopedMeetingAndTaskRoutesAreNotAvailable() throws Exception {
+        mockMvc.perform(get("/api/meetings")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks")).andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/meetings/4").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/meetings/4")).andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/tasks/10").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/tasks/10")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks/10/history")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks/milestone/3")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks/assignee/7")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks/research-decision/55")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks/experiment/66")).andExpect(status().isNotFound());
+
+        verify(meetingService, never()).getAllMeetings();
+        verify(taskService, never()).getAllTasks();
+        verify(meetingService, never()).updateMeeting(any(), any());
+        verify(taskService, never()).saveTask(any(), any());
+    }
+
+    @Test
+    void updatesAndDeletesAMeetingOnlyInsideItsProject() throws Exception {
+        Meeting meeting = new Meeting();
+        meeting.setId(4L);
+        meeting.setProjectId(1L);
+        meeting.setTitle("Weekly sync");
+        when(meetingService.updateMeeting(eq(1L), eq(4L), any())).thenReturn(meeting);
+        org.mockito.Mockito.doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"))
+            .when(meetingService).deleteMeeting(4L, 2L);
+
+        mockMvc.perform(put("/api/projects/1/meetings/4")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Weekly sync\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.projectId").value(1));
+        mockMvc.perform(delete("/api/projects/2/meetings/4"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void readsHistoryAndUpdatesATaskOnlyInsideItsProject() throws Exception {
+        TaskHistory history = new TaskHistory(10L, TaskStatus.TODO, TaskStatus.IN_PROGRESS, 5L, LocalDateTime.of(2026, 10, 1, 10, 0));
+        history.setId(1L);
+        when(taskService.getTaskHistoryForProject(1L, 10L)).thenReturn(List.of(history));
+        when(taskService.getTaskHistoryForProject(2L, 10L))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+        Task updated = new Task();
+        updated.setId(10L);
+        updated.setProjectId(1L);
+        updated.setTitle("Updated task");
+        updated.setStatus(TaskStatus.COMPLETED);
+        when(taskService.updateTaskForProject(eq(1L), eq(10L), any(), eq(42L))).thenReturn(updated);
+        org.mockito.Mockito.doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"))
+            .when(taskService).deleteTaskForProject(2L, 10L);
+
+        mockMvc.perform(get("/api/projects/1/tasks/10/history"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].newStatus").value("IN_PROGRESS"));
+        mockMvc.perform(get("/api/projects/2/tasks/10/history"))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/projects/1/tasks/10?userId=42")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Updated task\",\"status\":\"COMPLETED\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.projectId").value(1));
+        mockMvc.perform(delete("/api/projects/2/tasks/10"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listsMilestoneTasksOnlyForTheOwningProject() throws Exception {
+        Task task = new Task();
+        task.setId(15L);
+        task.setProjectId(1L);
+        task.setTitle("Owned task");
+        when(taskService.getTasksByMilestoneForProject(1L, 3L)).thenReturn(List.of(task));
+        when(taskService.getTasksByMilestoneForProject(2L, 3L))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+
+        mockMvc.perform(get("/api/projects/1/milestones/3/tasks"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value(15));
+        mockMvc.perform(get("/api/projects/2/milestones/3/tasks"))
+            .andExpect(status().isNotFound());
     }
 }

@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -186,17 +188,19 @@ class ProgressServiceTest {
     }
 
     @Test
-    @DisplayName("Completing a milestone task with no project id updates project progress")
-    void projectProgressIncludesMilestoneTasksWithoutProjectId() {
+    @DisplayName("Project progress ignores tasks with no project id or a different project id")
+    void projectProgressIgnoresTasksOutsideTheProject() {
         Milestone milestone = new Milestone();
         milestone.setId(MILESTONE_ID);
         milestone.setProjectId(PROJECT_ID);
-        Task completed = createTask(5L, null, MILESTONE_ID, STUDENT_ID, TaskStatus.COMPLETED);
-        when(taskRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of());
+        Task unscoped = createTask(5L, null, MILESTONE_ID, STUDENT_ID, TaskStatus.COMPLETED);
+        Task otherProject = createTask(6L, OTHER_PROJECT_ID, MILESTONE_ID, STUDENT_ID, TaskStatus.COMPLETED);
+        Task own = createTask(7L, PROJECT_ID, MILESTONE_ID, STUDENT_ID, TaskStatus.IN_PROGRESS);
+        when(taskRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(otherProject, own));
         when(milestoneService.getMilestonesByProject(PROJECT_ID)).thenReturn(List.of(milestone));
-        when(taskRepository.findByMilestoneId(MILESTONE_ID)).thenReturn(List.of(completed));
+        when(taskRepository.findByMilestoneId(MILESTONE_ID)).thenReturn(List.of(unscoped, otherProject, own));
 
-        assertThat(progressService.getProjectProgress(PROJECT_ID)).isEqualByComparingTo("100.00");
+        assertThat(progressService.getProjectProgress(PROJECT_ID)).isEqualByComparingTo("50.00");
     }
 
     @Test
@@ -207,5 +211,18 @@ class ProgressServiceTest {
 
         assertThat(progressService.getMilestoneProgress(MILESTONE_ID, PROJECT_ID)).isEqualByComparingTo("0.00");
         assertThat(progressService.getStudentProgress(STUDENT_ID, PROJECT_ID)).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    @DisplayName("Student progress in one project ignores that student's tasks in another project")
+    void studentProgressIsSpecificToTheRequestedProject() {
+        when(taskRepository.findByAssigneeIdAndProjectId(STUDENT_ID, PROJECT_ID))
+            .thenReturn(List.of(createTask(1L, PROJECT_ID, MILESTONE_ID, STUDENT_ID, TaskStatus.IN_PROGRESS)));
+        when(taskRepository.findByAssigneeIdAndProjectId(STUDENT_ID, OTHER_PROJECT_ID))
+            .thenReturn(List.of(createTask(2L, OTHER_PROJECT_ID, OTHER_MILESTONE_ID, STUDENT_ID, TaskStatus.COMPLETED)));
+
+        assertThat(progressService.getStudentProgress(STUDENT_ID, PROJECT_ID)).isEqualByComparingTo("50.00");
+        assertThat(progressService.getStudentProgress(STUDENT_ID, OTHER_PROJECT_ID)).isEqualByComparingTo("100.00");
+        verify(taskRepository, never()).findByAssigneeId(org.mockito.ArgumentMatchers.any());
     }
 }

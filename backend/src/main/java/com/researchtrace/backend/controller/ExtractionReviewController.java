@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/meetings")
+@RequestMapping("/api/projects/{projectId}/meetings")
 public class ExtractionReviewController {
 
     private final ExtractionReviewService extractionReviewService;
@@ -25,13 +25,16 @@ public class ExtractionReviewController {
 
     @PostMapping("/{meetingId}/review")
     public ExtractionReview reviewExtraction(
+            @PathVariable Long projectId,
             @PathVariable Long meetingId,
             @Valid @RequestBody ExtractionReviewRequest reviewRequest) {
-        return extractionReviewService.reviewExtraction(meetingId, reviewRequest);
+        return extractionReviewService.reviewExtraction(projectId, meetingId, reviewRequest);
     }
 
     @GetMapping("/{meetingId}/reviews")
-    public List<ExtractionReview> getReviewsForMeeting(@PathVariable Long meetingId) {
-        return extractionReviewService.getReviewsForMeeting(meetingId);
+    public List<ExtractionReview> getReviewsForMeeting(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId) {
+        return extractionReviewService.getReviewsForMeeting(projectId, meetingId);
     }
 }

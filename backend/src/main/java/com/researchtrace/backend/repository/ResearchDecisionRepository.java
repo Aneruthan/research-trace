@@ -9,6 +9,8 @@ import java.util.Optional;
 
 public interface ResearchDecisionRepository extends JpaRepository<ResearchDecision, Long> {
 
+    boolean existsByProjectId(Long projectId);
+
     List<ResearchDecision> findByProjectIdOrderByCreatedAtDesc(Long projectId);
 
     List<ResearchDecision> findByProjectIdOrderByDecidedAtAsc(Long projectId);

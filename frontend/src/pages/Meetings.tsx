@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   createProjectMeeting,
@@ -9,11 +9,17 @@ import {
 import type { Meeting } from '../api/types'
 import { localIsoDate } from '../components/common/dates'
 import { PageHeader } from '../components/common/PageHeader'
-
-const SELECTED_PROJECT_ID = 1
+import { NoActiveProject } from '../components/project/NoActiveProject'
+import { useActiveProject } from '../project/ActiveProjectContext'
+import { isCurrentProjectResponse } from '../project/projectSelection'
 
 export function Meetings() {
   const navigate = useNavigate()
+  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
+  const activeProjectIdRef = useRef(activeProjectId)
+  useEffect(() => {
+    activeProjectIdRef.current = activeProjectId
+  }, [activeProjectId])
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -40,21 +46,23 @@ export function Meetings() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  function loadMeetings(signal?: AbortSignal) {
+  function loadMeetings(projectId: number, signal?: AbortSignal) {
     setLoading(true)
     setError(null)
-    getProjectMeetings(SELECTED_PROJECT_ID, signal)
+    setMeetings([])
+    getProjectMeetings(projectId, signal)
       .then((data) => {
-        if (!signal?.aborted) {
-          setMeetings(data)
+        if (signal?.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+          return
         }
+        setMeetings(data)
       })
       .catch((cause: unknown) => {
-        if (signal?.aborted) return
+        if (signal?.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) return
         setError(cause instanceof Error ? cause.message : 'Could not load meetings')
       })
       .finally(() => {
-        if (!signal?.aborted) {
+        if (!signal?.aborted && isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
           setLoading(false)
         }
       })
@@ -62,9 +70,19 @@ export function Meetings() {
 
   useEffect(() => {
     const controller = new AbortController()
-    loadMeetings(controller.signal)
+    setMeetings([])
+    if (projectsLoading) {
+      setLoading(true)
+      return () => controller.abort()
+    }
+    if (projectsError || activeProjectId == null) {
+      setLoading(false)
+      setError(null)
+      return () => controller.abort()
+    }
+    loadMeetings(activeProjectId, controller.signal)
     return () => controller.abort()
-  }, [])
+  }, [activeProjectId, projectsLoading, projectsError])
 
   async function handleCreateMeeting(e: React.FormEvent) {
     e.preventDefault()
@@ -81,7 +99,11 @@ export function Meetings() {
 
     setSaving(true)
     try {
-      const created = await createProjectMeeting(SELECTED_PROJECT_ID, {
+      if (activeProjectId == null) {
+        setFormError('Select a project before creating a meeting.')
+        return
+      }
+      const created = await createProjectMeeting(activeProjectId, {
         title: title.trim(),
         meetingDate,
         notes: notes.trim() || undefined,
@@ -93,7 +115,7 @@ export function Meetings() {
       if (created.id != null) {
         navigate(`/meetings/${created.id}`)
       } else {
-        loadMeetings()
+        loadMeetings(activeProjectId)
       }
     } catch (cause: unknown) {
       setFormError(cause instanceof Error ? cause.message : 'Could not create meeting')
@@ -132,7 +154,11 @@ export function Meetings() {
     setSavingEdit(true)
     setEditError(null)
     try {
-      const updated = await updateMeeting(editingMeetingId, {
+      if (activeProjectId == null) {
+        setEditError('Select a project before editing a meeting.')
+        return
+      }
+      const updated = await updateMeeting(activeProjectId, editingMeetingId, {
         title: editTitle.trim(),
         meetingDate: editDate,
         notes: editNotes.trim() || undefined,
@@ -165,7 +191,11 @@ export function Meetings() {
     setDeleting(true)
     setDeleteError(null)
     try {
-      await deleteMeeting(meetingToDelete.id)
+      if (activeProjectId == null) {
+        setDeleteError('Select a project before deleting a meeting.')
+        return
+      }
+      await deleteMeeting(activeProjectId, meetingToDelete.id)
       setMeetings((prev) => prev.filter((m) => m.id !== meetingToDelete.id))
       setSuccessMessage(`Meeting "${meetingToDelete.title}" deleted successfully.`)
       setMeetingToDelete(null)
@@ -430,11 +460,16 @@ export function Meetings() {
         </form>
       ) : null}
 
-      {loading ? <p className="mt-6 text-sm text-stone-600">Loading meetings for project {SELECTED_PROJECT_ID}…</p> : null}
-      {!loading && !error && meetings.length === 0 ? (
+      {projectsLoading || (loading && activeProjectId != null) ? (
+        <p className="mt-6 text-sm text-stone-600">Loading meetings for the selected project…</p>
+      ) : null}
+      {!projectsLoading && (projectsError || activeProjectId == null) ? (
+        <NoActiveProject loading={false} error={projectsError} />
+      ) : null}
+      {!projectsLoading && activeProjectId != null && !loading && !error && meetings.length === 0 ? (
         <p className="mt-6 text-sm text-stone-500">No meetings for this project.</p>
       ) : null}
-      {!loading && !error && meetings.length > 0 ? (
+      {!projectsLoading && activeProjectId != null && !loading && !error && meetings.length > 0 ? (
         <ul className="mt-6 divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
           {meetings.map((meeting) => (
             <li

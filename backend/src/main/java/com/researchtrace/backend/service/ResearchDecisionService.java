@@ -33,7 +33,7 @@ public class ResearchDecisionService {
         ResearchDecision previous = requireDecision(decisionId);
         ResearchDecision replacement = requireDecision(replacementDecisionId);
         if (!projectId.equals(previous.getProjectId()) || !projectId.equals(replacement.getProjectId())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Research decisions must belong to the same project");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Decision not found");
         }
         if (decisionId.equals(replacement.getSupersedesDecisionId())
                 && previous.getStatus() == ResearchDecisionStatus.SUPERSEDED) {

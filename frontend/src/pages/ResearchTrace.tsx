@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getProjectMeetings } from '../api/meetings'
 import {
   createProjectExperiment,
@@ -24,15 +24,21 @@ import {
 } from '../api/research'
 import type { Meeting } from '../api/types'
 import { PageHeader } from '../components/common/PageHeader'
+import { NoActiveProject } from '../components/project/NoActiveProject'
+import { useActiveProject } from '../project/ActiveProjectContext'
+import { isCurrentProjectResponse } from '../project/projectSelection'
 import { ExtractionSections } from '../components/research/ExtractionSections'
 import { PersistedResearch } from '../components/research/PersistedResearch'
 import { buildDecisionChains, reviewOutcomeMessage } from '../components/research/researchDisplay'
 
-const SELECTED_PROJECT_ID = 1
-
 type ActiveTab = 'overview' | 'timeline' | 'decisions' | 'changes' | 'extraction'
 
 export function ResearchTrace() {
+  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
+  const activeProjectIdRef = useRef(activeProjectId)
+  useEffect(() => {
+    activeProjectIdRef.current = activeProjectId
+  }, [activeProjectId])
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
 
   // Project & Meetings
@@ -79,34 +85,65 @@ export function ResearchTrace() {
   // Load Initial Project Summary & Meetings
   useEffect(() => {
     const controller = new AbortController()
+    setMeetings([])
+    setSummary(null)
+    setDecisions([])
+    setTimeline([])
+    setChanges([])
+    setExperiments([])
+    setResults([])
+    setMeetingId(null)
+    setExtraction(null)
+    setLineage(null)
+    setSelectedDecisionId(null)
+    setMeetingsError(null)
+    setSummaryError(null)
+    if (projectsLoading) {
+      setMeetingsLoading(true)
+      setSummaryLoading(true)
+      return () => controller.abort()
+    }
+    if (projectsError || activeProjectId == null) {
+      setMeetingsLoading(false)
+      setSummaryLoading(false)
+      return () => controller.abort()
+    }
+    const projectId = activeProjectId
 
-    getProjectMeetings(SELECTED_PROJECT_ID, controller.signal)
+    getProjectMeetings(projectId, controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) setMeetings(data)
+        if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+          return
+        }
+        setMeetings(data)
       })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setMeetingsError(cause instanceof Error ? cause.message : 'Could not load meetings')
+        if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+          return
         }
+        setMeetingsError(cause instanceof Error ? cause.message : 'Could not load meetings')
       })
       .finally(() => {
-        if (!controller.signal.aborted) setMeetingsLoading(false)
+        if (!controller.signal.aborted && isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+          setMeetingsLoading(false)
+        }
       })
 
-    refreshSummary(controller.signal)
+    void refreshSummary(projectId, controller.signal)
 
     return () => controller.abort()
-  }, [])
+  }, [activeProjectId, projectsLoading, projectsError])
 
   // Load Reviews when Meeting changes
   useEffect(() => {
-    if (meetingId == null) {
+    if (meetingId == null || activeProjectId == null) {
       setReviews([])
       return
     }
     const controller = new AbortController()
+    const projectId = activeProjectId
     setReviewsLoading(true)
-    getResearchReviews(meetingId, controller.signal)
+    getResearchReviews(projectId, meetingId, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) setReviews(data)
       })
@@ -119,13 +156,19 @@ export function ResearchTrace() {
         if (!controller.signal.aborted) setReviewsLoading(false)
       })
     return () => controller.abort()
-  }, [meetingId])
+  }, [meetingId, activeProjectId])
 
-  async function refreshSummary(signal?: AbortSignal) {
+  async function refreshSummary(projectId: number | null, signal?: AbortSignal) {
+    if (projectId == null) {
+      return
+    }
     setSummaryLoading(true)
     setSummaryError(null)
     try {
-      const data = await getResearchSummary(SELECTED_PROJECT_ID, signal)
+      const data = await getResearchSummary(projectId, signal)
+      if (signal?.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+        return
+      }
       setSummary(data)
       setDecisions(data.decisions ?? [])
       setTimeline(data.timeline ?? [])
@@ -133,12 +176,17 @@ export function ResearchTrace() {
       setExperiments(data.experiments ?? [])
       setResults(data.results ?? [])
     } catch (cause: unknown) {
+      if (signal?.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+        return
+      }
       if (cause instanceof Error && cause.name !== 'AbortError') {
         setErrorMessage(cause.message)
         setSummaryError(cause.message)
       }
     } finally {
-      setSummaryLoading(false)
+      if (!signal?.aborted && isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
+        setSummaryLoading(false)
+      }
     }
   }
 
@@ -149,7 +197,8 @@ export function ResearchTrace() {
     setStatusMessage(null)
     setExtraction(null)
     try {
-      const result = await extractResearch(meetingId)
+      if (activeProjectId == null) return
+      const result = await extractResearch(activeProjectId, meetingId)
       setExtraction(result)
       setStatusMessage('Research information extracted. Review suggestions below and confirm or edit.')
     } catch (cause: unknown) {
@@ -165,10 +214,11 @@ export function ResearchTrace() {
     setErrorMessage(null)
     setStatusMessage(null)
     try {
-      await submitResearchReview(meetingId, status, extraction)
+      if (activeProjectId == null) return
+      await submitResearchReview(activeProjectId, meetingId, status, extraction)
       setExtraction(null)
-      setReviews(await getResearchReviews(meetingId))
-      await refreshSummary()
+      setReviews(await getResearchReviews(activeProjectId, meetingId))
+      await refreshSummary(activeProjectId)
       setStatusMessage(reviewOutcomeMessage(status))
     } catch (cause: unknown) {
       setErrorMessage(cause instanceof Error ? cause.message : 'Could not save the research review')
@@ -183,10 +233,13 @@ export function ResearchTrace() {
       setLineage(null)
       return
     }
+    if (activeProjectId == null) {
+      return
+    }
     setSelectedDecisionId(decisionId)
     setLineageLoading(true)
     try {
-      const data = await getDecisionLineage(SELECTED_PROJECT_ID, decisionId)
+      const data = await getDecisionLineage(activeProjectId, decisionId)
       setLineage(data)
     } catch (cause: unknown) {
       setErrorMessage(cause instanceof Error ? cause.message : 'Could not load decision lineage')
@@ -205,13 +258,13 @@ export function ResearchTrace() {
   }
 
   async function handleConfirmSupersede() {
-    if (!supersedeTarget || !supersedeTarget.id || !supersedeTitle.trim() || !supersedeRationale.trim()) return
+    if (activeProjectId == null || !supersedeTarget || !supersedeTarget.id || !supersedeTitle.trim() || !supersedeRationale.trim()) return
     setSupersedeSubmitting(true)
     setSupersedeError(null)
     setStatusMessage(null)
     setErrorMessage(null)
     try {
-      await supersedeResearchDecision(SELECTED_PROJECT_ID, supersedeTarget.id, {
+      await supersedeResearchDecision(activeProjectId, supersedeTarget.id, {
         title: supersedeTitle.trim(),
         rationale: supersedeRationale.trim(),
         meetingId: supersedeMeetingId ?? undefined,
@@ -219,7 +272,7 @@ export function ResearchTrace() {
       setSupersedeModalOpen(false)
       setSupersedeTarget(null)
       setStatusMessage(`Decision "${supersedeTarget.title}" was superseded by "${supersedeTitle.trim()}".`)
-      await refreshSummary()
+      await refreshSummary(activeProjectId)
     } catch (cause: unknown) {
       setSupersedeError(cause instanceof Error ? cause.message : 'Could not supersede decision')
     } finally {
@@ -228,30 +281,39 @@ export function ResearchTrace() {
   }
 
   async function handleCreateExperiment(title: string, decisionId: number | null) {
+    if (activeProjectId == null) {
+      return
+    }
     setErrorMessage(null)
-    await createProjectExperiment(SELECTED_PROJECT_ID, {
+    await createProjectExperiment(activeProjectId, {
       title,
       researchDecisionId: decisionId,
     })
     setStatusMessage(`Experiment "${title}" was added.`)
-    await refreshSummary()
+    await refreshSummary(activeProjectId)
   }
 
   async function handleLinkExperiment(experimentId: number, decisionId: number | null) {
+    if (activeProjectId == null) {
+      return
+    }
     setErrorMessage(null)
-    await updateExperimentDecision(SELECTED_PROJECT_ID, experimentId, decisionId)
+    await updateExperimentDecision(activeProjectId, experimentId, decisionId)
     setStatusMessage(decisionId == null ? 'Experiment decision link cleared.' : 'Experiment linked to the selected decision.')
-    await refreshSummary()
+    await refreshSummary(activeProjectId)
   }
 
   async function handleUpdateChangeStatus(changeId: number, newStatus: ResearchChangeStatus) {
+    if (activeProjectId == null) {
+      return
+    }
     try {
-      await updateResearchChangeStatus(SELECTED_PROJECT_ID, changeId, newStatus)
+      await updateResearchChangeStatus(activeProjectId, changeId, newStatus)
       setChanges((prev) =>
         prev.map((c) => (c.id === changeId ? { ...c, status: newStatus } : c)),
       )
       setStatusMessage(`Change status updated to ${newStatus}.`)
-      await refreshSummary()
+      await refreshSummary(activeProjectId)
     } catch (cause: unknown) {
       setErrorMessage(cause instanceof Error ? cause.message : 'Could not update change status')
     }
@@ -263,6 +325,9 @@ export function ResearchTrace() {
         title="Research Trace & Lineage"
         description="Extract research information, review decisions, trace supporting experiments, results, and direction changes across supervision meetings."
       />
+      {!projectsLoading && (projectsError || activeProjectId == null) ? (
+        <NoActiveProject loading={false} error={projectsError} />
+      ) : null}
 
       {/* Metric Overview Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -647,8 +712,8 @@ export function ResearchTrace() {
       )}
 
       {/* Persisted Research Records Panel */}
-      <PersistedResearch
-        projectId={SELECTED_PROJECT_ID}
+      {activeProjectId != null ? <PersistedResearch
+        projectId={activeProjectId}
         loading={summaryLoading}
         error={summaryError}
         decisions={decisions}
@@ -657,7 +722,7 @@ export function ResearchTrace() {
         events={timeline}
         onCreateExperiment={handleCreateExperiment}
         onLinkExperiment={handleLinkExperiment}
-      />
+      /> : null}
 
       {/* Supersede Modal */}
       {supersedeModalOpen && supersedeTarget && (

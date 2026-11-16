@@ -216,8 +216,10 @@ export class ApiError extends Error {
 }
 
 // AI Extraction & Human Review API
-export async function extractResearch(meetingId: number): Promise<MeetingExtraction> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/research-extraction`, {
+export async function extractResearch(projectId: number, meetingId: number): Promise<MeetingExtraction> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/research-extraction`,
+    {
     method: 'POST',
   })
   if (!response.ok) {
@@ -227,11 +229,12 @@ export async function extractResearch(meetingId: number): Promise<MeetingExtract
 }
 
 export async function submitResearchReview(
+  projectId: number,
   meetingId: number,
   status: ResearchReviewStatus,
   extraction: MeetingExtraction,
 ): Promise<ExtractionReview> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/review`, {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status, extraction }),
@@ -279,10 +282,14 @@ async function getJson<T>(path: string, signal: AbortSignal | undefined, fallbac
 }
 
 export async function getResearchReviews(
+  projectId: number,
   meetingId: number,
   signal?: AbortSignal,
 ): Promise<ExtractionReview[]> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/reviews`, { signal })
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/reviews`,
+    { signal },
+  )
   if (!response.ok) {
     throw new ApiError(await failureMessage(response, 'Could not load research reviews'), response.status)
   }

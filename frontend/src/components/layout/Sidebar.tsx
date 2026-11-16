@@ -1,7 +1,10 @@
 import { NavLink } from 'react-router-dom'
+import { ProjectSelector } from '../project/ProjectSelector'
 
 const links = [
   { to: '/', label: 'Dashboard', end: true },
+  { to: '/projects', label: 'Projects', end: false },
+  { to: '/students', label: 'Students', end: false },
   { to: '/meetings', label: 'Meetings', end: false },
   { to: '/tasks', label: 'Tasks', end: false },
   { to: '/milestones', label: 'Milestones', end: false },
@@ -24,6 +27,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         </p>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
+        <ProjectSelector />
         {links.map((link) => (
           <NavLink
             key={link.to}

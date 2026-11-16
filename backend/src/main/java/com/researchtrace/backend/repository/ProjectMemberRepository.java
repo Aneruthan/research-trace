@@ -8,4 +8,8 @@ import java.util.List;
 public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Long> {
 
     List<ProjectMember> findByProjectId(Long projectId);
+
+    List<ProjectMember> findByUserId(Long userId);
+
+    boolean existsByProjectId(Long projectId);
 }

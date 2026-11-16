@@ -24,8 +24,12 @@ export async function getProjectMeetings(
   return parseJsonResponse<Meeting[]>(response, `Could not load meetings for project ${projectId}`)
 }
 
-export async function getMeeting(meetingId: number, signal?: AbortSignal): Promise<Meeting> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, { signal })
+export async function getMeeting(
+  projectId: number,
+  meetingId: number,
+  signal?: AbortSignal,
+): Promise<Meeting> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}`, { signal })
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, `Could not load meeting ${meetingId}`))
   }
@@ -48,10 +52,11 @@ export async function createProjectMeeting(
 }
 
 export async function updateMeeting(
+  projectId: number,
   meetingId: number,
   request: UpdateMeetingRequest,
 ): Promise<Meeting> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -62,8 +67,8 @@ export async function updateMeeting(
   return parseJsonResponse<Meeting>(response, `Could not update meeting ${meetingId}`)
 }
 
-export async function deleteMeeting(meetingId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
+export async function deleteMeeting(projectId: number, meetingId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}`, {
     method: 'DELETE',
   })
   if (!response.ok) {

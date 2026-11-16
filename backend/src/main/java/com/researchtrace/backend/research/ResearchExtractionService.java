@@ -20,6 +20,11 @@ public class ResearchExtractionService {
         this.researchNotesExtractor = researchNotesExtractor;
     }
 
+    public MeetingExtractionResponse extract(Long projectId, Long meetingId) {
+        meetingService.getMeetingForProject(projectId, meetingId);
+        return extract(meetingId);
+    }
+
     public MeetingExtractionResponse extract(Long meetingId) {
         Meeting meeting = meetingService.getMeetingById(meetingId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));

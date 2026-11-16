@@ -6,18 +6,23 @@ import com.researchtrace.backend.service.MilestoneService;
 import com.researchtrace.backend.service.ProgressService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @RestController
-@RequestMapping("/api/milestones")
+@RequestMapping("/api/projects/{projectId}/milestones")
 public class MilestoneController {
 
     private final MilestoneService milestoneService;
-
     private final ProgressService progressService;
 
     public MilestoneController(MilestoneService milestoneService, ProgressService progressService) {
@@ -25,44 +30,42 @@ public class MilestoneController {
         this.progressService = progressService;
     }
 
-    @GetMapping
-    public List<Milestone> getAllMilestones() {
-        return milestoneService.getAllMilestones();
-    }
-
     @PostMapping
-    public Milestone createMilestone(@RequestBody Milestone milestone) {
-        return milestoneService.saveMilestone(milestone);
+    @ResponseStatus(HttpStatus.CREATED)
+    public Milestone createMilestone(
+            @PathVariable Long projectId,
+            @RequestBody Milestone milestone) {
+        return milestoneService.createForProject(projectId, milestone);
     }
 
-    @GetMapping("/{id}")
-    public Milestone getMilestoneById(@PathVariable Long id) {
-        return milestoneService.getMilestoneById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found: " + id));
+    @GetMapping("/{milestoneId}")
+    public Milestone getMilestone(
+            @PathVariable Long projectId,
+            @PathVariable Long milestoneId) {
+        return milestoneService.getMilestoneForProject(projectId, milestoneId);
     }
 
     @GetMapping("/{milestoneId}/progress")
     public BigDecimal getMilestoneProgress(
-            @PathVariable Long milestoneId,
-            @RequestParam(required = false) Long projectId) {
-        Milestone milestone = milestoneService.getMilestoneById(milestoneId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found: " + milestoneId));
-        Long effectiveProjectId = projectId != null ? projectId : milestone.getProjectId();
-        return effectiveProjectId != null
-            ? progressService.getMilestoneProgress(milestoneId, effectiveProjectId)
-            : progressService.getMilestoneProgress(milestoneId);
+            @PathVariable Long projectId,
+            @PathVariable Long milestoneId) {
+        milestoneService.getMilestoneForProject(projectId, milestoneId);
+        return progressService.getMilestoneProgress(milestoneId, projectId);
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/{milestoneId}")
     public Milestone updateMilestone(
-        @PathVariable Long id,
-        @Valid @RequestBody MilestoneUpdateRequest milestone) {
-
-        return milestoneService.updateMilestone(id, milestone);
+            @PathVariable Long projectId,
+            @PathVariable Long milestoneId,
+            @Valid @RequestBody MilestoneUpdateRequest milestone) {
+        return milestoneService.updateForProject(projectId, milestoneId, milestone);
     }
 
-    @DeleteMapping("/{id}")
-    public void deleteMilestone(@PathVariable Long id) {
-        milestoneService.deleteMilestone(id);
+    @DeleteMapping("/{milestoneId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMilestone(
+            @PathVariable Long projectId,
+            @PathVariable Long milestoneId) {
+        milestoneService.deleteForProject(projectId, milestoneId);
     }
 }

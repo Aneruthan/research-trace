@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { assigneeLabel, studentLabel } from '../../api/users'
+import { formatDateOrTimestamp, localIsoDate } from '../common/dates'
+import { isOverdueTask, taskCounts } from '../../work/work'
 import type {
   Meeting,
   Milestone,
@@ -41,12 +43,29 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
               {project?.description ?? 'No description'}
             </p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+              Objectives: {project?.objectives ?? 'None recorded'}
+            </p>
+            <p className="mt-2 text-xs text-stone-500">
+              {formatDateOrTimestamp(project?.startDate ?? null) ?? 'No start date'}
+              {' – '}
+              {formatDateOrTimestamp(project?.targetDate ?? null) ?? 'No target date'}
+            </p>
+            <p className="mt-1 text-xs text-stone-500">
+              Supervisor: {project?.supervisorId == null
+                ? 'Unassigned'
+                : users.find((user) => user.id === project.supervisorId)?.name?.trim() || 'Unknown supervisor'}
+            </p>
           </div>
           <span className="w-fit rounded-full bg-stone-950 px-3 py-1 text-xs font-medium tracking-wide text-stone-50">
             {project?.status ?? 'No status'}
           </span>
         </div>
         <ProgressMeter label="Project progress" value={dashboard.projectProgress} />
+        <p className="mt-3 text-xs text-stone-600">
+          {taskCounts(dashboard.tasks, localIsoDate()).overdue} overdue tasks in this project.
+          Overdue means the due date is before today and the task is not completed.
+        </p>
       </section>
 
       {dashboard.researchMetrics ? (
@@ -85,7 +104,7 @@ export function DashboardView({ dashboard, users }: DashboardViewProps) {
           ) : (
             <ul className="space-y-4">
               {dashboard.studentProgress.map((item) => (
-                <StudentProgressRow key={item.studentId ?? 'unknown'} item={item} users={users} />
+                <StudentProgressRow key={item.studentId ?? 'unknown'} item={item} users={users} tasks={dashboard.tasks} />
               ))}
             </ul>
           )}
@@ -177,10 +196,22 @@ function ProgressMeter({ label, value }: { label: string; value: number | null }
   )
 }
 
-function StudentProgressRow({ item, users }: { item: StudentProgressItem; users: User[] }) {
+function StudentProgressRow({
+  item,
+  users,
+  tasks,
+}: {
+  item: StudentProgressItem
+  users: User[]
+  tasks: Task[]
+}) {
+  const counts = taskCounts(tasks.filter((task) => task.assigneeId === item.studentId), localIsoDate())
   return (
     <li>
       <p className="text-sm font-medium text-stone-900">{studentLabel(item.studentId, users)}</p>
+      <p className="text-xs text-stone-500">
+        {counts.completed} completed · {counts.inProgress} in progress · {counts.pending} pending · {counts.overdue} overdue
+      </p>
       <ProgressMeter label="Progress" value={item.progress} />
     </li>
   )
@@ -240,6 +271,7 @@ function TaskRow({
         <p className="text-xs text-stone-500">
           Assignee: {assigneeLabel(task.assigneeId, users)} · Milestone: {milestoneName}
           {task.dueDate ? ` · Due ${task.dueDate}` : ''}
+          {isOverdueTask(task, localIsoDate()) ? ' · Overdue' : ''}
         </p>
         {(task.researchDecisionId || task.experimentId) ? (
           <div className="mt-1 flex flex-wrap gap-2">

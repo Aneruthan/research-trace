@@ -96,6 +96,12 @@ public class TaskSuggestionService {
     }
 
     @Transactional
+    public List<TaskSuggestion> extract(Long projectId, Long meetingId) {
+        requireMeetingInProject(projectId, meetingId);
+        return extract(meetingId);
+    }
+
+    @Transactional
     public List<TaskSuggestion> extract(Long meetingId) {
         Meeting meeting = findMeeting(meetingId);
         Long projectId = meeting.getProjectId();
@@ -136,6 +142,12 @@ public class TaskSuggestionService {
     }
 
     @Transactional(readOnly = true)
+    public List<TaskSuggestion> listByMeeting(Long projectId, Long meetingId) {
+        requireMeetingInProject(projectId, meetingId);
+        return listByMeeting(meetingId);
+    }
+
+    @Transactional(readOnly = true)
     public List<TaskSuggestion> listByMeeting(Long meetingId) {
         findMeeting(meetingId);
         return taskSuggestionRepository.findByMeetingId(meetingId).stream()
@@ -146,10 +158,22 @@ public class TaskSuggestionService {
     }
 
     @Transactional
+    public TaskSuggestion update(Long projectId, Long meetingId, Long suggestionId, AcceptTaskSuggestionRequest request) {
+        requireSuggestionInProject(projectId, meetingId, suggestionId);
+        return update(suggestionId, request);
+    }
+
+    @Transactional
     public TaskSuggestion update(Long suggestionId, AcceptTaskSuggestionRequest request) {
         TaskSuggestion suggestion = findPendingSuggestion(suggestionId);
         applyReviewedValues(suggestion, request);
         return taskSuggestionRepository.save(suggestion);
+    }
+
+    @Transactional
+    public Task accept(Long projectId, Long meetingId, Long suggestionId, AcceptTaskSuggestionRequest request) {
+        requireSuggestionInProject(projectId, meetingId, suggestionId);
+        return accept(suggestionId, request);
     }
 
     @Transactional
@@ -191,6 +215,12 @@ public class TaskSuggestionService {
         syncAcceptedMilestone(savedTask.getMilestoneId());
 
         return savedTask;
+    }
+
+    @Transactional
+    public TaskSuggestion reject(Long projectId, Long meetingId, Long suggestionId) {
+        requireSuggestionInProject(projectId, meetingId, suggestionId);
+        return reject(suggestionId);
     }
 
     @Transactional
@@ -404,6 +434,22 @@ public class TaskSuggestionService {
             .map(milestone -> new MilestoneCandidate(milestone.getId(), milestone.getTitle()))
             .sorted(Comparator.comparing(MilestoneCandidate::id))
             .toList();
+    }
+
+    private void requireMeetingInProject(Long projectId, Long meetingId) {
+        Meeting meeting = findMeeting(meetingId);
+        if (projectId == null || !projectId.equals(meeting.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found");
+        }
+    }
+
+    private void requireSuggestionInProject(Long projectId, Long meetingId, Long suggestionId) {
+        requireMeetingInProject(projectId, meetingId);
+        TaskSuggestion suggestion = taskSuggestionRepository.findById(suggestionId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task suggestion not found"));
+        if (!meetingId.equals(suggestion.getMeetingId()) || !projectId.equals(suggestion.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task suggestion not found");
+        }
     }
 
     private Meeting findMeeting(Long meetingId) {

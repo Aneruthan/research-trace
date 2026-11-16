@@ -25,18 +25,18 @@ class StudentControllerTest {
 
     @Test
     void returnsStudentProgress() throws Exception {
-        when(progressService.getStudentProgress(7L)).thenReturn(new BigDecimal("50.00"));
+        when(progressService.getStudentProgress(7L, 1L)).thenReturn(new BigDecimal("50.00"));
 
-        mockMvc.perform(get("/api/students/7/progress"))
+        mockMvc.perform(get("/api/projects/1/students/7/progress"))
             .andExpect(status().isOk())
             .andExpect(content().string("50.00"));
     }
 
     @Test
     void returnsZeroProgressForStudentWithoutTasks() throws Exception {
-        when(progressService.getStudentProgress(9L)).thenReturn(new BigDecimal("0.00"));
+        when(progressService.getStudentProgress(9L, 1L)).thenReturn(new BigDecimal("0.00"));
 
-        mockMvc.perform(get("/api/students/9/progress"))
+        mockMvc.perform(get("/api/projects/1/students/9/progress"))
             .andExpect(status().isOk())
             .andExpect(content().string("0.00"));
     }

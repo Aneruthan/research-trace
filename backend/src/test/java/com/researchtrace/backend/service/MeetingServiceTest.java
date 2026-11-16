@@ -115,6 +115,31 @@ class MeetingServiceTest {
     }
 
     @Test
+    void getMeetingsByProjectDoesNotReadEveryMeeting() {
+        Meeting owned = new Meeting();
+        owned.setId(1L);
+        owned.setProjectId(1L);
+        owned.setTitle("Project A");
+        when(meetingRepository.findByProjectId(1L)).thenReturn(List.of(owned));
+
+        assertThat(meetingService.getMeetingsByProject(1L)).containsExactly(owned);
+        verify(meetingRepository, never()).findAll();
+    }
+
+    @Test
+    void updateMeetingForProjectRejectsAnotherProjectsMeeting() {
+        Meeting existing = new Meeting();
+        existing.setId(5L);
+        existing.setProjectId(2L);
+        when(meetingRepository.findById(5L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> meetingService.updateMeeting(1L, 5L, new Meeting()))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(meetingRepository, never()).save(any());
+    }
+
+    @Test
     void updateMeeting_mergesFieldsAndPreservesProjectId() {
         Meeting existing = new Meeting();
         existing.setId(5L);
@@ -221,9 +246,10 @@ class MeetingServiceTest {
 
         when(meetingRepository.findById(10L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> meetingService.deleteMeeting(10L, 2L)) // wrong project!
+        assertThatThrownBy(() -> meetingService.deleteMeeting(10L, 2L))
                 .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(meetingRepository, never()).delete(any());
     }
 
     @Test
@@ -256,5 +282,39 @@ class MeetingServiceTest {
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("at most 255 characters");
         verify(meetingRepository, never()).save(any());
+    }
+
+    @Test
+    void getMeetingForProjectReturnsTheMeetingWhenItBelongsToTheProject() {
+        Meeting meeting = new Meeting();
+        meeting.setId(7L);
+        meeting.setProjectId(1L);
+        meeting.setTitle("ViT review");
+        when(meetingRepository.findById(7L)).thenReturn(Optional.of(meeting));
+
+        Meeting loaded = meetingService.getMeetingForProject(1L, 7L);
+
+        assertThat(loaded.getTitle()).isEqualTo("ViT review");
+    }
+
+    @Test
+    void getMeetingForProjectRejectsAMeetingFromAnotherProject() {
+        Meeting meeting = new Meeting();
+        meeting.setId(7L);
+        meeting.setProjectId(2L);
+        when(meetingRepository.findById(7L)).thenReturn(Optional.of(meeting));
+
+        assertThatThrownBy(() -> meetingService.getMeetingForProject(1L, 7L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void getMeetingForProjectRejectsAMissingMeeting() {
+        when(meetingRepository.findById(7L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.getMeetingForProject(1L, 7L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 }

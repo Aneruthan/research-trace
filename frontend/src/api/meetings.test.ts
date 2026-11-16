@@ -74,14 +74,14 @@ test('updateMeeting calls PUT on meeting endpoint and merges updates', async () 
   }) as typeof fetch
 
   try {
-    const result = await updateMeeting(42, {
+    const result = await updateMeeting(1, 42, {
       title: 'Updated Meeting Title',
       meetingDate: '2026-11-09',
       notes: 'Expanded notes',
     })
 
     assert.strictEqual(capturedMethod, 'PUT')
-    assert(capturedUrl.includes('/api/meetings/42'))
+    assert(capturedUrl.endsWith('/api/projects/1/meetings/42'))
     assert(!capturedUrl.includes('""'))
     assert.strictEqual(result.id, 42)
     assert.strictEqual(result.title, 'Updated Meeting Title')
@@ -103,9 +103,9 @@ test('deleteMeeting calls DELETE on meeting endpoint', async () => {
   }) as typeof fetch
 
   try {
-    await deleteMeeting(42)
+    await deleteMeeting(1, 42)
     assert.strictEqual(capturedMethod, 'DELETE')
-    assert(capturedUrl.includes('/api/meetings/42'))
+    assert(capturedUrl.endsWith('/api/projects/1/meetings/42'))
     assert(!capturedUrl.includes('""'))
   } finally {
     globalThis.fetch = originalFetch
@@ -130,7 +130,7 @@ test('deleteMeeting throws informative error when backend rejects deletion', asy
   try {
     await assert.rejects(
       async () => {
-        await deleteMeeting(7)
+        await deleteMeeting(1, 7)
       },
       (err: Error) => {
         assert(err.message.includes('Cannot delete meeting with linked research records'))
@@ -146,14 +146,14 @@ test('getProjectMeetings and getMeeting fetch correctly', async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (url.includes('/api/projects/1/meetings')) {
-      return new Response(JSON.stringify([{ id: 1, title: 'Meeting 1' }]), {
+    if (url.endsWith('/api/projects/1/meetings/1')) {
+      return new Response(JSON.stringify({ id: 1, projectId: 1, title: 'Meeting 1' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
     }
-    if (url.includes('/api/meetings/1')) {
-      return new Response(JSON.stringify({ id: 1, title: 'Meeting 1' }), {
+    if (url.endsWith('/api/projects/1/meetings')) {
+      return new Response(JSON.stringify([{ id: 1, title: 'Meeting 1' }]), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -166,7 +166,7 @@ test('getProjectMeetings and getMeeting fetch correctly', async () => {
     assert.strictEqual(list.length, 1)
     assert.strictEqual(list[0].id, 1)
 
-    const single = await getMeeting(1)
+    const single = await getMeeting(1, 1)
     assert.strictEqual(single.id, 1)
   } finally {
     globalThis.fetch = originalFetch

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getProjectMeetings } from '../api/meetings'
 import { getProjectMilestones } from '../api/milestones'
@@ -8,14 +8,22 @@ import {
   type Experiment,
   type ResearchDecision,
 } from '../api/research'
-import { getProjectProgress, getProjectTasks, updateTaskStatus } from '../api/tasks'
-import type { Meeting, Milestone, Task, TaskStatus, User } from '../api/types'
-import { assigneeLabel, getUsers } from '../api/users'
+import { createProjectTask, getProjectProgress, getProjectTasks, updateProjectTask, updateTaskStatus } from '../api/tasks'
+import type { Meeting, Milestone, ProjectMember, Task, TaskStatus, User } from '../api/types'
+import { assigneeLabel, getProjectMembers, getUsers } from '../api/users'
 import { PageHeader } from '../components/common/PageHeader'
-
-const SELECTED_PROJECT_ID = 1
+import { NoActiveProject } from '../components/project/NoActiveProject'
+import { useActiveProject } from '../project/ActiveProjectContext'
+import { isCurrentProjectResponse } from '../project/projectSelection'
+import { localIsoDate } from '../components/common/dates'
+import { filterTasks, isOverdueTask, validateTaskDraft, type TaskListFilter } from '../work/work'
 
 export function Tasks() {
+  const { activeProjectId, loading: projectsLoading, error: projectsError } = useActiveProject()
+  const activeProjectIdRef = useRef(activeProjectId)
+  useEffect(() => {
+    activeProjectIdRef.current = activeProjectId
+  }, [activeProjectId])
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [usersUnavailable, setUsersUnavailable] = useState(false)
@@ -27,8 +35,14 @@ export function Tasks() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
+  const [members, setMembers] = useState<ProjectMember[]>([])
+  const [filter, setFilter] = useState<TaskListFilter>('ALL')
+  const [studentFilter, setStudentFilter] = useState('')
+  const [milestoneFilter, setMilestoneFilter] = useState('')
+  const [draft, setDraft] = useState<Task | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
 
-  async function load(signal?: AbortSignal) {
+  async function load(projectId: number, signal?: AbortSignal) {
     const [
       loadedTasks,
       loadedUsers,
@@ -37,16 +51,18 @@ export function Tasks() {
       loadedMeetings,
       loadedDecisions,
       loadedExperiments,
+      loadedMembers,
     ] = await Promise.all([
-      getProjectTasks(SELECTED_PROJECT_ID, signal),
+      getProjectTasks(projectId, signal),
       getUsers(signal).catch(() => null),
-      getProjectProgress(SELECTED_PROJECT_ID, signal).catch(() => null),
-      getProjectMilestones(SELECTED_PROJECT_ID, signal).catch(() => [] as Milestone[]),
-      getProjectMeetings(SELECTED_PROJECT_ID, signal).catch(() => [] as Meeting[]),
-      getProjectResearchDecisions(SELECTED_PROJECT_ID, signal).catch(() => [] as ResearchDecision[]),
-      getProjectExperiments(SELECTED_PROJECT_ID, signal).catch(() => [] as Experiment[]),
+      getProjectProgress(projectId, signal).catch(() => null),
+      getProjectMilestones(projectId, signal).catch(() => [] as Milestone[]),
+      getProjectMeetings(projectId, signal).catch(() => [] as Meeting[]),
+      getProjectResearchDecisions(projectId, signal).catch(() => [] as ResearchDecision[]),
+      getProjectExperiments(projectId, signal).catch(() => [] as Experiment[]),
+      getProjectMembers(projectId, signal).catch(() => [] as ProjectMember[]),
     ])
-    if (signal?.aborted) {
+    if (signal?.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
       return
     }
     setTasks(loadedTasks)
@@ -57,26 +73,38 @@ export function Tasks() {
     setMeetings(loadedMeetings)
     setDecisions(loadedDecisions)
     setExperiments(loadedExperiments)
+    setMembers(loadedMembers)
   }
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
+    setTasks([])
+    setProjectProgress(null)
     setError(null)
-    load(controller.signal)
+    if (projectsLoading) {
+      setLoading(true)
+      return () => controller.abort()
+    }
+    if (projectsError || activeProjectId == null) {
+      setLoading(false)
+      return () => controller.abort()
+    }
+    const projectId = activeProjectId
+    setLoading(true)
+    load(projectId, controller.signal)
       .catch((cause: unknown) => {
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
           return
         }
         setError(cause instanceof Error ? cause.message : 'Could not load tasks')
       })
       .finally(() => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && isCurrentProjectResponse(projectId, activeProjectIdRef.current)) {
           setLoading(false)
         }
       })
     return () => controller.abort()
-  }, [])
+  }, [activeProjectId, projectsLoading, projectsError])
 
   async function changeStatus(task: Task, status: TaskStatus) {
     if (task.id == null || task.status === status) {
@@ -92,12 +120,15 @@ export function Tasks() {
         prev.map((t) => (t.id === targetTaskId ? { ...t, status: updated.status ?? status } : t)),
       )
       // Refresh authoritative backend progress and aggregates
-      await load()
+      if (activeProjectId != null) {
+        await load(activeProjectId)
+      }
       window.dispatchEvent(new Event('researchtrace-progress-changed'))
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not update task')
-      // On failure, reload server state to ensure UI remains consistent with persisted database
-      await load().catch(() => {})
+      if (activeProjectId != null) {
+        await load(activeProjectId).catch(() => {})
+      }
     } finally {
       setSavingId(null)
     }
@@ -128,6 +159,47 @@ export function Tasks() {
   )
 
   const validTasks = tasks.filter((t): t is Task & { id: number } => t.id != null)
+  const today = localIsoDate()
+  const milestoneSelection = milestoneFilter === 'none'
+    ? 'none'
+    : milestoneFilter === '' ? null : Number(milestoneFilter)
+  const visibleTasks = filterTasks(
+    validTasks,
+    filter,
+    today,
+    studentFilter === '' ? null : Number(studentFilter),
+    milestoneSelection,
+  )
+  const studentMembers = members.filter((member) => member.role === 'STUDENT' && member.userId != null)
+
+  async function saveDraft(event: React.FormEvent) {
+    event.preventDefault()
+    if (draft == null || activeProjectId == null) return
+    const validation = validateTaskDraft(draft.title ?? '')
+    if (validation) {
+      setFormError(validation)
+      return
+    }
+    setFormError(null)
+    try {
+      if (draft.id == null) {
+        await createProjectTask(activeProjectId, {
+          title: draft.title?.trim() ?? '',
+          description: draft.description ?? null,
+          assigneeId: draft.assigneeId ?? null,
+          milestoneId: draft.milestoneId ?? null,
+          dueDate: draft.dueDate ?? null,
+          status: draft.status ?? 'TODO',
+        })
+      } else {
+        await updateProjectTask({ ...draft, projectId: activeProjectId, title: draft.title?.trim() ?? '' })
+      }
+      setDraft(null)
+      await load(activeProjectId)
+    } catch (cause: unknown) {
+      setFormError(cause instanceof Error ? cause.message : 'Could not save task')
+    }
+  }
 
   return (
     <section>
@@ -135,20 +207,83 @@ export function Tasks() {
         title="Tasks"
         description="Accepted tasks, student assignment, research motivation, and status updates."
       />
-      {loading ? <p className="mt-6 text-sm text-stone-600">Loading tasks for project {SELECTED_PROJECT_ID}…</p> : null}
-      {!loading && projectProgress != null ? (
+      {projectsLoading || (loading && activeProjectId != null) ? (
+        <p className="mt-6 text-sm text-stone-600">Loading tasks for the selected project…</p>
+      ) : null}
+      {!projectsLoading && (projectsError || activeProjectId == null) ? (
+        <NoActiveProject loading={false} error={projectsError} />
+      ) : null}
+      {!projectsLoading && activeProjectId != null && !loading && projectProgress != null ? (
         <p className="mt-4 text-sm text-stone-700" data-testid="project-progress-label">
           Project progress from the backend: {projectProgress.toFixed(2)}%
         </p>
       ) : null}
       {!loading && usersUnavailable ? <UsersUnavailableNotice /> : null}
       {!loading && error ? <Alert message={error} /> : null}
-      {!loading && !error && validTasks.length === 0 ? (
-        <p className="mt-6 text-sm text-stone-500">No tasks for this project.</p>
+      {!projectsLoading && activeProjectId != null && !loading ? (
+        <div className="mt-6 flex flex-wrap gap-2">
+          <button type="button" className="rounded-md bg-stone-950 px-3 py-2 text-sm text-white" onClick={() => setDraft({ id: null, projectId: activeProjectId, title: '', description: '', status: 'TODO', assigneeId: null, milestoneId: null, dueDate: null })}>Create task</button>
+          {(['ALL', 'TODO', 'IN_PROGRESS', 'COMPLETED', 'OVERDUE', 'UNASSIGNED'] as TaskListFilter[]).map((item) => (
+            <button key={item} type="button" className="rounded-md border border-stone-300 px-2 py-1 text-xs" onClick={() => setFilter(item)}>{item}</button>
+          ))}
+          <label className="text-xs text-stone-600">Student
+            <select className="ml-2 rounded-md border border-stone-300 bg-white px-2 py-1" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)}>
+              <option value="">All</option>
+              {studentMembers.map((member) => <option key={member.userId} value={member.userId ?? ''}>{assigneeLabel(member.userId, users)}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-stone-600">Milestone
+            <select className="ml-2 rounded-md border border-stone-300 bg-white px-2 py-1" value={milestoneFilter} onChange={(event) => setMilestoneFilter(event.target.value)}>
+              <option value="">All</option>
+              <option value="none">No milestone</option>
+              {milestones.filter((milestone) => milestone.id != null).map((milestone) => <option key={milestone.id} value={milestone.id ?? ''}>{milestone.title}</option>)}
+            </select>
+          </label>
+        </div>
       ) : null}
-      {!loading && !error && validTasks.length > 0 ? (
+      {draft && activeProjectId != null ? (
+        <form className="mt-4 grid gap-3 rounded-lg border border-stone-200 bg-white p-4 sm:grid-cols-2" onSubmit={(event) => void saveDraft(event)}>
+          <label className="text-xs font-medium text-stone-600">Title
+            <input className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm" value={draft.title ?? ''} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+          </label>
+          <label className="text-xs font-medium text-stone-600">Description
+            <input className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm" value={draft.description ?? ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+          </label>
+          <label className="text-xs font-medium text-stone-600">Assignee
+            <select className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" value={draft.assigneeId ?? ''} onChange={(event) => setDraft({ ...draft, assigneeId: event.target.value === '' ? null : Number(event.target.value) })}>
+              <option value="">Unassigned</option>
+              {studentMembers.map((member) => <option key={member.userId} value={member.userId ?? ''}>{assigneeLabel(member.userId, users)}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-stone-600">Milestone
+            <select className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" value={draft.milestoneId ?? ''} onChange={(event) => setDraft({ ...draft, milestoneId: event.target.value === '' ? null : Number(event.target.value) })}>
+              <option value="">No milestone</option>
+              {milestones.filter((milestone) => milestone.id != null).map((milestone) => <option key={milestone.id} value={milestone.id ?? ''}>{milestone.title}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-stone-600">Due date
+            <input className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm" type="date" value={draft.dueDate ?? ''} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value || null })} />
+          </label>
+          <label className="text-xs font-medium text-stone-600">Status
+            <select className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" value={draft.status ?? 'TODO'} onChange={(event) => setDraft({ ...draft, status: event.target.value as TaskStatus })}>
+              <option value="TODO">TODO</option>
+              <option value="IN_PROGRESS">IN_PROGRESS</option>
+              <option value="COMPLETED">COMPLETED</option>
+            </select>
+          </label>
+          {formError ? <p className="text-sm text-red-700 sm:col-span-2">{formError}</p> : null}
+          <div className="flex gap-2 sm:col-span-2">
+            <button className="rounded-md bg-stone-950 px-3 py-2 text-sm text-white" type="submit">Save task</button>
+            <button className="rounded-md border border-stone-300 px-3 py-2 text-sm" type="button" onClick={() => setDraft(null)}>Cancel</button>
+          </div>
+        </form>
+      ) : null}
+      {!projectsLoading && activeProjectId != null && !loading && !error && visibleTasks.length === 0 ? (
+        <p className="mt-6 text-sm text-stone-500">No tasks match this project and filter.</p>
+      ) : null}
+      {!projectsLoading && activeProjectId != null && !loading && !error && visibleTasks.length > 0 ? (
         <ul className="mt-6 divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-          {validTasks.map((task) => {
+          {visibleTasks.map((task) => {
             const milestoneName = task.milestoneId != null
               ? milestonesMap.get(task.milestoneId) ?? `Milestone #${task.milestoneId}`
               : 'No milestone'
@@ -172,7 +307,10 @@ export function Tasks() {
                 className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
               >
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-stone-950">{task.title ?? 'Untitled task'}</p>
+                  <p className="text-sm font-medium text-stone-950">
+                    <Link className="underline" to={`/tasks/${task.id}`}>{task.title ?? 'Untitled task'}</Link>
+                    {isOverdueTask(task, today) ? <span className="ml-2 text-xs font-medium text-red-700">Overdue</span> : null}
+                  </p>
                   {task.description ? (
                     <p className="text-xs text-stone-600">{task.description}</p>
                   ) : null}
@@ -213,7 +351,8 @@ export function Tasks() {
                     ) : null}
                   </div>
                 </div>
-                <span className="text-xs font-medium tracking-wide text-stone-500 sm:self-center">
+                <span className="flex items-center gap-2 text-xs font-medium tracking-wide text-stone-500 sm:self-center">
+                  <button type="button" className="rounded-md border border-stone-300 px-2 py-1" onClick={() => setDraft(task)}>Edit</button>
                   <label className="sr-only" htmlFor={`status-${task.id}`}>Status</label>
                   <select
                     id={`status-${task.id}`}

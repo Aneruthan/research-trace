@@ -42,10 +42,10 @@ class ExtractionReviewControllerTest {
         review.setStatus(ExtractionReviewStatus.ACCEPTED);
         review.setExtractionJson("{\"decisions\":[{\"title\":\"Keep the baseline\"}]}");
         review.setCreatedAt(LocalDateTime.of(2026, 10, 12, 22, 15));
-        when(extractionReviewService.reviewExtraction(eq(21L), any())).thenReturn(review);
-        when(extractionReviewService.getReviewsForMeeting(21L)).thenReturn(List.of(review));
+        when(extractionReviewService.reviewExtraction(eq(1L), eq(21L), any())).thenReturn(review);
+        when(extractionReviewService.getReviewsForMeeting(1L, 21L)).thenReturn(List.of(review));
 
-        mockMvc.perform(post("/api/meetings/21/review")
+        mockMvc.perform(post("/api/projects/1/meetings/21/review")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -60,35 +60,35 @@ class ExtractionReviewControllerTest {
             .andExpect(jsonPath("$.meetingId").value(21))
             .andExpect(jsonPath("$.extractionJson").value(review.getExtractionJson()));
 
-        mockMvc.perform(get("/api/meetings/21/reviews"))
+        mockMvc.perform(get("/api/projects/1/meetings/21/reviews"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].status").value("ACCEPTED"));
     }
 
     @Test
     void rejectsMissingStatusOrExtraction() throws Exception {
-        mockMvc.perform(post("/api/meetings/21/review")
+        mockMvc.perform(post("/api/projects/1/meetings/21/review")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"extraction\": {}}"))
             .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/api/meetings/21/review")
+        mockMvc.perform(post("/api/projects/1/meetings/21/review")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\": \"PENDING\"}"))
             .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/api/meetings/21/review")
+        mockMvc.perform(post("/api/projects/1/meetings/21/review")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\": \"MAYBE\", \"extraction\": {}}"))
             .andExpect(status().isBadRequest());
 
-        verify(extractionReviewService, never()).reviewExtraction(any(), any());
+        verify(extractionReviewService, never()).reviewExtraction(any(), any(), any());
     }
 
     @Test
     void returnsNotFoundWhenMeetingIsMissing() throws Exception {
-        when(extractionReviewService.getReviewsForMeeting(99L))
+        when(extractionReviewService.getReviewsForMeeting(1L, 99L))
             .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
 
-        mockMvc.perform(get("/api/meetings/99/reviews"))
+        mockMvc.perform(get("/api/projects/1/meetings/99/reviews"))
             .andExpect(status().isNotFound());
     }
 }

@@ -2,6 +2,7 @@ package com.researchtrace.backend.service;
 
 import com.researchtrace.backend.dto.MilestoneUpdateRequest;
 import com.researchtrace.backend.model.Milestone;
+import com.researchtrace.backend.model.MilestoneStatus;
 import com.researchtrace.backend.model.TextLimits;
 import com.researchtrace.backend.repository.MilestoneRepository;
 import com.researchtrace.backend.repository.TaskRepository;
@@ -33,6 +34,47 @@ public class MilestoneService {
 
     public List<Milestone> getMilestonesByProject(Long projectId) {
         return milestoneRepository.findByProjectId(projectId);
+    }
+
+    public Milestone getMilestoneForProject(Long projectId, Long milestoneId) {
+        Milestone milestone = milestoneRepository.findById(milestoneId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+        if (projectId == null || !projectId.equals(milestone.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found");
+        }
+        return milestone;
+    }
+
+    public Milestone createForProject(Long projectId, Milestone milestone) {
+        if (projectId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Project ID is required");
+        }
+        if (milestone == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Milestone details are required");
+        }
+        if (milestone.getTitle() == null || milestone.getTitle().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Milestone title cannot be empty");
+        }
+        milestone.setTitle(milestone.getTitle().trim());
+        if (milestone.getStatus() == null) {
+            milestone.setStatus(MilestoneStatus.NOT_STARTED);
+        }
+        if (milestone.getWeight() != null && milestone.getWeight().signum() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Milestone weight cannot be negative");
+        }
+        milestone.setId(null);
+        milestone.setProjectId(projectId);
+        return saveMilestone(milestone);
+    }
+
+    public Milestone updateForProject(Long projectId, Long milestoneId, MilestoneUpdateRequest request) {
+        getMilestoneForProject(projectId, milestoneId);
+        return updateMilestone(milestoneId, request);
+    }
+
+    public void deleteForProject(Long projectId, Long milestoneId) {
+        getMilestoneForProject(projectId, milestoneId);
+        deleteMilestone(milestoneId);
     }
 
     public Milestone saveMilestone(Milestone milestone) {

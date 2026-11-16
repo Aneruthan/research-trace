@@ -9,6 +9,8 @@ public interface ExperimentRepository extends JpaRepository<Experiment, Long> {
 
     List<Experiment> findByProjectId(Long projectId);
 
+    boolean existsByProjectId(Long projectId);
+
     List<Experiment> findByProjectIdOrderByCreatedAtDesc(Long projectId);
 
     List<Experiment> findByResearchDecisionId(Long researchDecisionId);

@@ -8,6 +8,10 @@ import com.researchtrace.backend.model.TaskSuggestion;
 import com.researchtrace.backend.model.TaskSuggestionStatus;
 import com.researchtrace.backend.model.ResearchEvent;
 import com.researchtrace.backend.model.ResearchEventType;
+import com.researchtrace.backend.model.Meeting;
+import com.researchtrace.backend.model.ProjectMember;
+import com.researchtrace.backend.repository.MeetingRepository;
+import com.researchtrace.backend.repository.ProjectMemberRepository;
 import com.researchtrace.backend.repository.ResearchEventRepository;
 import com.researchtrace.backend.repository.TaskHistoryRepository;
 import com.researchtrace.backend.model.Experiment;
@@ -22,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -62,11 +67,200 @@ class TaskServiceTest {
     @Mock
     private ResearchEventRepository researchEventRepository;
 
+    @Mock
+    private MeetingRepository meetingRepository;
+
+    @Mock
+    private ProjectMemberRepository projectMemberRepository;
+
     private TaskService taskService;
 
     @BeforeEach
     void setUp() {
         taskService = new TaskService(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository, researchDecisionRepository, experimentRepository, researchEventRepository);
+    }
+
+    @Test
+    void getTaskForProjectReturnsTheTaskWhenItBelongsToTheProject() {
+        Task task = task(10L, null);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+
+        assertThat(taskService.getTaskForProject(PROJECT_ID, 10L).getTitle()).isEqualTo("Task 10");
+    }
+
+    @Test
+    void getTaskForProjectRejectsATaskFromAnotherProject() {
+        Task task = task(10L, null);
+        task.setProjectId(999L);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> taskService.getTaskForProject(PROJECT_ID, 10L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void getTaskForProjectRejectsAMissingTask() {
+        when(taskRepository.findById(10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskService.getTaskForProject(PROJECT_ID, 10L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void projectCannotReadAnotherProjectsTaskHistory() {
+        Task foreign = task(10L, null);
+        foreign.setProjectId(2L);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> taskService.getTaskHistoryForProject(PROJECT_ID, 10L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(taskHistoryRepository, never()).findByTaskIdOrderByChangedAtAscIdAsc(any());
+    }
+
+    @Test
+    void projectCanReadItsOwnTaskHistory() {
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(task(10L, null)));
+        when(taskRepository.existsById(10L)).thenReturn(true);
+        TaskHistory history = new TaskHistory(10L, TaskStatus.TODO, TaskStatus.IN_PROGRESS, null, LocalDateTime.now());
+        when(taskHistoryRepository.findByTaskIdOrderByChangedAtAscIdAsc(10L)).thenReturn(List.of(history));
+
+        assertThat(taskService.getTaskHistoryForProject(PROJECT_ID, 10L)).containsExactly(history);
+    }
+
+    @Test
+    void projectCannotListAnotherProjectsMilestoneTasks() {
+        Milestone foreign = milestone(3L);
+        foreign.setProjectId(2L);
+        when(milestoneService.getMilestoneById(3L)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> taskService.getTasksByMilestoneForProject(PROJECT_ID, 3L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(taskRepository, never()).findByMilestoneIdAndProjectId(any(), any());
+    }
+
+    @Test
+    void projectListsOnlyItsOwnMilestoneTasks() {
+        when(milestoneService.getMilestoneById(3L)).thenReturn(Optional.of(milestone(3L)));
+        Task owned = task(15L, 3L);
+        when(taskRepository.findByMilestoneIdAndProjectId(3L, PROJECT_ID)).thenReturn(List.of(owned));
+
+        assertThat(taskService.getTasksByMilestoneForProject(PROJECT_ID, 3L)).containsExactly(owned);
+    }
+
+    @Test
+    void assigneeTaskListStaysInsideTheProject() {
+        Task owned = task(15L, null);
+        owned.setAssigneeId(7L);
+        when(taskRepository.findByAssigneeIdAndProjectId(7L, PROJECT_ID)).thenReturn(List.of(owned));
+
+        assertThat(taskService.getTasksByAssigneeForProject(PROJECT_ID, 7L)).containsExactly(owned);
+        verify(taskRepository, never()).findByAssigneeIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void projectCannotListTasksForAnotherProjectsDecisionOrExperiment() {
+        ResearchDecision decision = new ResearchDecision();
+        decision.setId(55L);
+        decision.setProjectId(2L);
+        when(researchDecisionRepository.findById(55L)).thenReturn(Optional.of(decision));
+        Experiment experiment = new Experiment();
+        experiment.setId(66L);
+        experiment.setProjectId(2L);
+        when(experimentRepository.findById(66L)).thenReturn(Optional.of(experiment));
+
+        assertThatThrownBy(() -> taskService.getTasksByResearchDecisionForProject(PROJECT_ID, 55L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> taskService.getTasksByExperimentForProject(PROJECT_ID, 66L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void projectCanUpdateAndDeleteItsOwnTaskButNotAnotherProjectsTask() {
+        Task owned = task(10L, null);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(owned));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Task update = new Task();
+        update.setTitle("Updated");
+        update.setStatus(TaskStatus.IN_PROGRESS);
+
+        Task saved = taskService.updateTaskForProject(PROJECT_ID, 10L, update, null);
+        assertThat(saved.getProjectId()).isEqualTo(PROJECT_ID);
+        assertThat(saved.getTitle()).isEqualTo("Updated");
+
+        taskService.deleteTaskForProject(PROJECT_ID, 10L);
+        verify(taskRepository).deleteById(10L);
+
+        Task foreign = task(11L, null);
+        foreign.setProjectId(2L);
+        when(taskRepository.findById(11L)).thenReturn(Optional.of(foreign));
+        assertThatThrownBy(() -> taskService.updateTaskForProject(PROJECT_ID, 11L, update, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> taskService.deleteTaskForProject(PROJECT_ID, 11L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(taskRepository, never()).deleteById(11L);
+    }
+
+    @Test
+    void rejectsAMeetingOrAssigneeFromAnotherProject() {
+        TaskService validating = new TaskService(
+            taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
+            researchDecisionRepository, experimentRepository, researchEventRepository, null,
+            meetingRepository, projectMemberRepository);
+        Task owned = task(10L, null);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(owned));
+        Meeting otherMeeting = new Meeting();
+        otherMeeting.setId(4L);
+        otherMeeting.setProjectId(2L);
+        when(meetingRepository.findById(4L)).thenReturn(Optional.of(otherMeeting));
+        ProjectMember member = new ProjectMember();
+        member.setUserId(8L);
+        when(projectMemberRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(member));
+
+        Task withForeignMeeting = new Task();
+        withForeignMeeting.setTitle("Task 10");
+        withForeignMeeting.setStatus(TaskStatus.TODO);
+        withForeignMeeting.setMeetingId(4L);
+        assertThatThrownBy(() -> validating.updateTaskForProject(PROJECT_ID, 10L, withForeignMeeting, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Meeting must belong to the task's project");
+
+        Task withForeignAssignee = new Task();
+        withForeignAssignee.setTitle("Task 10");
+        withForeignAssignee.setStatus(TaskStatus.TODO);
+        withForeignAssignee.setAssigneeId(99L);
+        assertThatThrownBy(() -> validating.updateTaskForProject(PROJECT_ID, 10L, withForeignAssignee, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Assignee must be a student member of the task's project");
+        verify(taskRepository, never()).save(any());
+    }
+
+    @Test
+    void createForProjectKeepsTheRequestedProjectAndRejectsABlankTitle() {
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Task input = new Task();
+        input.setTitle("  Record the baseline  ");
+        input.setProjectId(999L);
+
+        Task created = taskService.createForProject(PROJECT_ID, input);
+
+        assertThat(created.getProjectId()).isEqualTo(PROJECT_ID);
+        assertThat(created.getTitle()).isEqualTo("Record the baseline");
+        assertThat(created.getStatus()).isEqualTo(TaskStatus.TODO);
+        assertThat(created.getId()).isNull();
+
+        Task blank = new Task();
+        blank.setTitle(" ");
+        assertThatThrownBy(() -> taskService.createForProject(PROJECT_ID, blank))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
     @Test
@@ -103,6 +297,21 @@ class TaskServiceTest {
 
         assertThat(taskService.getTasksByProject(PROJECT_ID)).isEmpty();
         verify(taskRepository, never()).findByMilestoneIdIn(List.of());
+    }
+
+    @Test
+    void excludesTasksOwnedByAnotherProject() {
+        when(milestoneService.getMilestonesByProject(PROJECT_ID)).thenReturn(List.of(milestone(11L)));
+        Task foreignMilestoneTask = task(700L, 11L);
+        foreignMilestoneTask.setProjectId(999L);
+        when(taskRepository.findByMilestoneIdIn(List.of(11L))).thenReturn(List.of(foreignMilestoneTask));
+        when(taskSuggestionRepository.findByProjectIdAndStatus(PROJECT_ID, TaskSuggestionStatus.ACCEPTED))
+            .thenReturn(List.of(acceptedSuggestion(800L)));
+        Task foreignAcceptedTask = task(800L, null);
+        foreignAcceptedTask.setProjectId(999L);
+        when(taskRepository.findAllById(List.of(800L))).thenReturn(List.of(foreignAcceptedTask));
+
+        assertThat(taskService.getTasksByProject(PROJECT_ID)).isEmpty();
     }
 
     @Test
@@ -352,6 +561,7 @@ class TaskServiceTest {
     private static Task task(Long id, Long milestoneId) {
         Task task = new Task();
         task.setId(id);
+        task.setProjectId(PROJECT_ID);
         task.setMilestoneId(milestoneId);
         task.setTitle("Task " + id);
         return task;

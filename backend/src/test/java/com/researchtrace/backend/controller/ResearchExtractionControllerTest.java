@@ -35,33 +35,33 @@ class ResearchExtractionControllerTest {
         decision.setConfidence(0.8);
         MeetingExtractionResponse response = new MeetingExtractionResponse();
         response.setDecisions(List.of(decision));
-        when(researchExtractionService.extract(21L)).thenReturn(response);
+        when(researchExtractionService.extract(1L, 21L)).thenReturn(response);
 
-        mockMvc.perform(post("/api/meetings/21/research-extraction"))
+        mockMvc.perform(post("/api/projects/1/meetings/21/research-extraction"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.decisions[0].title").value("Keep the baseline"))
             .andExpect(jsonPath("$.decisions[0].confidence").value(0.8));
 
-        verify(researchExtractionService).extract(21L);
+        verify(researchExtractionService).extract(1L, 21L);
     }
 
     @Test
     void returnsNotFoundWhenMeetingIsMissing() throws Exception {
-        when(researchExtractionService.extract(99L))
+        when(researchExtractionService.extract(1L, 99L))
             .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
 
-        mockMvc.perform(post("/api/meetings/99/research-extraction"))
+        mockMvc.perform(post("/api/projects/1/meetings/99/research-extraction"))
             .andExpect(status().isNotFound());
     }
 
     @Test
     void returnsServiceUnavailableWhenGeminiIsNotConfigured() throws Exception {
-        when(researchExtractionService.extract(21L))
+        when(researchExtractionService.extract(1L, 21L))
             .thenThrow(new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "Gemini research extraction is not configured"));
 
-        mockMvc.perform(post("/api/meetings/21/research-extraction"))
+        mockMvc.perform(post("/api/projects/1/meetings/21/research-extraction"))
             .andExpect(status().isServiceUnavailable());
     }
 }

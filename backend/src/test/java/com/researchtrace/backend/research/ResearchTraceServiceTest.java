@@ -29,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -40,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -186,7 +188,7 @@ class ResearchTraceServiceTest {
 
         assertThatThrownBy(() -> researchTraceService.supersedeDecision(PROJECT_ID, 101L, request))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("does not belong to project");
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     @Test
@@ -203,7 +205,7 @@ class ResearchTraceServiceTest {
 
         assertThatThrownBy(() -> researchTraceService.createExperiment(PROJECT_ID, request))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("belongs to a different project");
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     @Test
@@ -241,7 +243,8 @@ class ResearchTraceServiceTest {
 
         assertThatThrownBy(() -> researchTraceService.updateExperimentDecision(PROJECT_ID, 70L, 50L))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("different project");
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(experimentRepository, never()).save(any());
     }
 
     @Test
@@ -258,7 +261,7 @@ class ResearchTraceServiceTest {
 
         assertThatThrownBy(() -> researchTraceService.recordResult(PROJECT_ID, request))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("belongs to a different project");
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     @Test
@@ -397,7 +400,7 @@ class ResearchTraceServiceTest {
 
         assertThatThrownBy(() -> researchTraceService.getTasksForDecision(PROJECT_ID, 100L))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("Decision does not belong to project " + PROJECT_ID);
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     @Test

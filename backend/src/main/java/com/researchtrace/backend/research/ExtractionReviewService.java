@@ -39,6 +39,12 @@ public class ExtractionReviewService {
     }
 
     @Transactional
+    public ExtractionReview reviewExtraction(Long projectId, Long meetingId, ExtractionReviewRequest reviewRequest) {
+        meetingService.getMeetingForProject(projectId, meetingId);
+        return reviewExtraction(meetingId, reviewRequest);
+    }
+
+    @Transactional
     public ExtractionReview reviewExtraction(Long meetingId, ExtractionReviewRequest reviewRequest) {
         Meeting meeting = requireMeeting(meetingId);
         if (reviewRequest == null || reviewRequest.getStatus() == null || reviewRequest.getExtraction() == null) {
@@ -67,6 +73,12 @@ public class ExtractionReviewService {
         }
 
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExtractionReview> getReviewsForMeeting(Long projectId, Long meetingId) {
+        meetingService.getMeetingForProject(projectId, meetingId);
+        return getReviewsForMeeting(meetingId);
     }
 
     @Transactional(readOnly = true)

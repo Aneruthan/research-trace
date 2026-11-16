@@ -2,12 +2,19 @@ package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.model.ProjectMember;
 import com.researchtrace.backend.service.ProjectMemberService;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/project-members")
+@RequestMapping("/api/projects/{projectId}/members")
 public class ProjectMemberController {
 
     private final ProjectMemberService projectMemberService;
@@ -16,33 +23,34 @@ public class ProjectMemberController {
         this.projectMemberService = projectMemberService;
     }
 
-    @GetMapping
-    public List<ProjectMember> getAllProjectMembers() {
-        return projectMemberService.getAllProjectMembers();
-    }
-
-    @GetMapping("/{id}")
-    public ProjectMember getProjectMemberById(@PathVariable Long id) {
-        return projectMemberService.getProjectMemberById(id)
-            .orElseThrow(() -> new RuntimeException("Project member not found"));
-    }
-
     @PostMapping
-    public ProjectMember createProjectMember(@RequestBody ProjectMember projectMember) {
-        return projectMemberService.saveProjectMember(projectMember);
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProjectMember addMember(
+            @PathVariable Long projectId,
+            @RequestBody ProjectMember projectMember) {
+        return projectMemberService.addMember(projectId, projectMember);
     }
 
-    @PutMapping("/{id}")
-    public ProjectMember updateProjectMember(
-        @PathVariable Long id,
-        @RequestBody ProjectMember projectMember) {
+    @GetMapping("/{memberId}")
+    public ProjectMember getMember(
+            @PathVariable Long projectId,
+            @PathVariable Long memberId) {
+        return projectMemberService.getMemberForProject(projectId, memberId);
+    }
 
-    projectMember.setId(id);
-    return projectMemberService.saveProjectMember(projectMember);
-}
+    @PutMapping("/{memberId}")
+    public ProjectMember updateMember(
+            @PathVariable Long projectId,
+            @PathVariable Long memberId,
+            @RequestBody ProjectMember projectMember) {
+        return projectMemberService.updateMember(projectId, memberId, projectMember);
+    }
 
-    @DeleteMapping("/{id}")
-    public void deleteProjectMember(@PathVariable Long id) {
-        projectMemberService.deleteProjectMember(id);
+    @DeleteMapping("/{memberId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeMember(
+            @PathVariable Long projectId,
+            @PathVariable Long memberId) {
+        projectMemberService.removeMember(projectId, memberId);
     }
 }

@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/meetings")
+@RequestMapping("/api/projects/{projectId}/meetings")
 public class ResearchExtractionController {
 
     private final ResearchExtractionService researchExtractionService;
@@ -18,7 +18,9 @@ public class ResearchExtractionController {
     }
 
     @PostMapping("/{meetingId}/research-extraction")
-    public MeetingExtractionResponse extractResearch(@PathVariable Long meetingId) {
-        return researchExtractionService.extract(meetingId);
+    public MeetingExtractionResponse extractResearch(
+            @PathVariable Long projectId,
+            @PathVariable Long meetingId) {
+        return researchExtractionService.extract(projectId, meetingId);
     }
 }

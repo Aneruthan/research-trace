@@ -320,11 +320,11 @@ class ResearchTraceControllerTest {
     }
 
     @Test
-    void getTasksForDecisionReturns400WhenDecisionBelongsToOtherProject() throws Exception {
+    void getTasksForDecisionReturns404WhenDecisionBelongsToOtherProject() throws Exception {
         when(researchTraceService.getTasksForDecision(PROJECT_ID, 20L))
-            .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision does not belong to project " + PROJECT_ID));
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Decision not found: 20"));
 
         mockMvc.perform(get("/api/projects/1/research/decisions/20/tasks"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isNotFound());
     }
 }

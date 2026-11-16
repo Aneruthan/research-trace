@@ -45,33 +45,34 @@ class MilestoneControllerTest {
 
     @Test
     void returnsDerivedMilestoneProgress() throws Exception {
-        when(milestoneService.getMilestoneById(11L)).thenReturn(Optional.of(new com.researchtrace.backend.model.Milestone()));
-        when(progressService.getMilestoneProgress(11L)).thenReturn(new BigDecimal("50.00"));
+        when(milestoneService.getMilestoneForProject(1L, 11L)).thenReturn(new Milestone());
+        when(progressService.getMilestoneProgress(11L, 1L)).thenReturn(new BigDecimal("50.00"));
 
-        mockMvc.perform(get("/api/milestones/11/progress"))
+        mockMvc.perform(get("/api/projects/1/milestones/11/progress"))
             .andExpect(status().isOk())
             .andExpect(content().string("50.00"));
 
-        verify(progressService).getMilestoneProgress(11L);
+        verify(progressService).getMilestoneProgress(11L, 1L);
     }
 
     @Test
     void returnsNotFoundWhenMilestoneIsMissing() throws Exception {
-        when(milestoneService.getMilestoneById(99L)).thenReturn(Optional.empty());
+        when(milestoneService.getMilestoneForProject(1L, 99L))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
 
-        mockMvc.perform(get("/api/milestones/99/progress"))
+        mockMvc.perform(get("/api/projects/1/milestones/99/progress"))
             .andExpect(status().isNotFound());
     }
 
     @Test
     void rejectsAMilestoneTitleLongerThan255() throws Exception {
-        mockMvc.perform(put("/api/milestones/5")
+        mockMvc.perform(put("/api/projects/1/milestones/5")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"" + "m".repeat(256) + "\"}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("Title must be at most 255 characters"));
 
-        verify(milestoneService, never()).updateMilestone(eq(5L), any(com.researchtrace.backend.dto.MilestoneUpdateRequest.class));
+        verify(milestoneService, never()).updateForProject(eq(1L), eq(5L), any(MilestoneUpdateRequest.class));
     }
 
     @Test
@@ -79,9 +80,9 @@ class MilestoneControllerTest {
         doThrow(new ResponseStatusException(
             HttpStatus.CONFLICT,
             "Cannot delete this milestone because tasks are still associated with it. Reassign or remove those tasks first."))
-            .when(milestoneService).deleteMilestone(5L);
+            .when(milestoneService).deleteForProject(1L, 5L);
 
-        mockMvc.perform(delete("/api/milestones/5"))
+        mockMvc.perform(delete("/api/projects/1/milestones/5"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.message").value(
                 "Cannot delete this milestone because tasks are still associated with it. Reassign or remove those tasks first."));
@@ -89,20 +90,20 @@ class MilestoneControllerTest {
 
     @Test
     void explicitNullWeightIsDistinctFromAnOmittedWeight() throws Exception {
-        when(milestoneService.updateMilestone(eq(5L), any(MilestoneUpdateRequest.class)))
+        when(milestoneService.updateForProject(eq(1L), eq(5L), any(MilestoneUpdateRequest.class)))
             .thenReturn(new Milestone());
         ArgumentCaptor<MilestoneUpdateRequest> updates = ArgumentCaptor.forClass(MilestoneUpdateRequest.class);
 
-        mockMvc.perform(put("/api/milestones/5")
+        mockMvc.perform(put("/api/projects/1/milestones/5")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"weight\":null}"))
             .andExpect(status().isOk());
-        mockMvc.perform(put("/api/milestones/5")
+        mockMvc.perform(put("/api/projects/1/milestones/5")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Baseline\"}"))
             .andExpect(status().isOk());
 
-        verify(milestoneService, org.mockito.Mockito.times(2)).updateMilestone(eq(5L), updates.capture());
+        verify(milestoneService, org.mockito.Mockito.times(2)).updateForProject(eq(1L), eq(5L), updates.capture());
         assertThat(updates.getAllValues().get(0).hasWeight()).isTrue();
         assertThat(updates.getAllValues().get(0).getWeight()).isNull();
         assertThat(updates.getAllValues().get(1).hasWeight()).isFalse();

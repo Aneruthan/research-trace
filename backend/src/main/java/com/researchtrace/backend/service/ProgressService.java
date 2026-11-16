@@ -48,7 +48,15 @@ public class ProgressService {
         if (projectId == null) {
             return zeroProgress();
         }
-        List<Task> tasks = new ArrayList<>(taskRepository.findByProjectId(projectId));
+        List<Task> tasks = new ArrayList<>();
+        List<Task> directTasks = taskRepository.findByProjectId(projectId);
+        if (directTasks != null) {
+            for (Task task : directTasks) {
+                if (belongsToProject(task, projectId)) {
+                    tasks.add(task);
+                }
+            }
+        }
         List<Milestone> milestones = milestoneService.getMilestonesByProject(projectId);
         if (milestones != null) {
             for (Milestone milestone : milestones) {
@@ -60,7 +68,7 @@ public class ProgressService {
                     continue;
                 }
                 for (Task task : milestoneTasks) {
-                    if (task != null && (task.getProjectId() == null || projectId.equals(task.getProjectId()))) {
+                    if (belongsToProject(task, projectId)) {
                         tasks.add(task);
                     }
                 }
@@ -162,6 +170,10 @@ public class ProgressService {
             return ONE_HUNDRED.setScale(PROGRESS_SCALE, RoundingMode.HALF_UP);
         }
         return progress;
+    }
+
+    private static boolean belongsToProject(Task task, Long projectId) {
+        return task != null && projectId != null && projectId.equals(task.getProjectId());
     }
 
     public BigDecimal zeroProgress() {

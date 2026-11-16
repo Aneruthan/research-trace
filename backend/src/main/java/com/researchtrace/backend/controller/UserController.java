@@ -2,6 +2,7 @@ package com.researchtrace.backend.controller;
 
 import com.researchtrace.backend.model.User;
 import com.researchtrace.backend.service.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,14 +29,14 @@ public class UserController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     public User createUser(@RequestBody User user) {
-        return userService.saveUser(user);
+        return userService.createUser(user);
     }
 
     @PutMapping("/{id}")
     public User updateUser(@PathVariable Long id, @RequestBody User user) {
-        user.setId(id);
-        return userService.saveUser(user);
+        return userService.updateUser(id, user);
     }
 
     @DeleteMapping("/{id}")

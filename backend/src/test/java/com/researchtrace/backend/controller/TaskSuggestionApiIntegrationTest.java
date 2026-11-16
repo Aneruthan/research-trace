@@ -86,7 +86,7 @@ class TaskSuggestionApiIntegrationTest {
 
     @Test
     void extractsListsEditsAcceptsAndRejectsThroughTheApi() throws Exception {
-        mockMvc.perform(post("/api/meetings/{id}/task-suggestions/extract", meetingId))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{id}/task-suggestions/extract", PROJECT_ID, meetingId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(2))
             .andExpect(jsonPath("$[0].status").value("PENDING"))
@@ -99,18 +99,18 @@ class TaskSuggestionApiIntegrationTest {
         Long firstId = idWithTitle(suggestions, "Run Qwen baseline");
         Long secondId = idWithTitle(suggestions, "Prepare dataset statistics");
 
-        mockMvc.perform(get("/api/meetings/{id}/task-suggestions", meetingId))
+        mockMvc.perform(get("/api/projects/{projectId}/meetings/{id}/task-suggestions", PROJECT_ID, meetingId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(2));
 
-        mockMvc.perform(put("/api/task-suggestions/{id}", firstId)
+        mockMvc.perform(put("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}", PROJECT_ID, meetingId, firstId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\": \"  Run Qwen baseline on dev split  \"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.title").value("Run Qwen baseline on dev split"))
             .andExpect(jsonPath("$.status").value("PENDING"));
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", firstId)
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, firstId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"dueDate\": \"2026-10-09\"}"))
             .andExpect(status().isOk())
@@ -121,7 +121,7 @@ class TaskSuggestionApiIntegrationTest {
             .andExpect(jsonPath("$.dueDate").value("2026-10-09"))
             .andExpect(jsonPath("$.status").value(TaskStatus.TODO.name()));
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/reject", secondId))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/reject", PROJECT_ID, meetingId, secondId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("REJECTED"));
 
@@ -133,11 +133,11 @@ class TaskSuggestionApiIntegrationTest {
     void rejectsStudentFromAnotherProject() throws Exception {
         Long suggestionId = extractFirstSuggestionId();
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", suggestionId)
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, suggestionId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"assigneeId\": " + outsiderId + "}"))
             .andExpect(status().isBadRequest());
-        mockMvc.perform(put("/api/task-suggestions/{id}", suggestionId)
+        mockMvc.perform(put("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}", PROJECT_ID, meetingId, suggestionId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"assigneeId\": " + outsiderId + "}"))
             .andExpect(status().isBadRequest());
@@ -149,7 +149,7 @@ class TaskSuggestionApiIntegrationTest {
     void rejectsMilestoneFromAnotherProject() throws Exception {
         Long suggestionId = extractFirstSuggestionId();
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", suggestionId)
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, suggestionId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"milestoneId\": " + otherProjectMilestoneId + "}"))
             .andExpect(status().isBadRequest());
@@ -161,7 +161,7 @@ class TaskSuggestionApiIntegrationTest {
     void rejectsBlankTitle() throws Exception {
         Long suggestionId = extractFirstSuggestionId();
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", suggestionId)
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, suggestionId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\": \"   \"}"))
             .andExpect(status().isBadRequest());
@@ -171,13 +171,13 @@ class TaskSuggestionApiIntegrationTest {
 
     @Test
     void returnsNotFoundForMissingMeetingAndSuggestion() throws Exception {
-        mockMvc.perform(post("/api/meetings/{id}/task-suggestions/extract", 999_999L))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{id}/task-suggestions/extract", PROJECT_ID, 999_999L))
             .andExpect(status().isNotFound());
-        mockMvc.perform(get("/api/meetings/{id}/task-suggestions", 999_999L))
+        mockMvc.perform(get("/api/projects/{projectId}/meetings/{id}/task-suggestions", PROJECT_ID, 999_999L))
             .andExpect(status().isNotFound());
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", 999_999L))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, 999_999L))
             .andExpect(status().isNotFound());
-        mockMvc.perform(post("/api/task-suggestions/{id}/reject", 999_999L))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/reject", PROJECT_ID, meetingId, 999_999L))
             .andExpect(status().isNotFound());
     }
 
@@ -185,14 +185,14 @@ class TaskSuggestionApiIntegrationTest {
     void returnsConflictWhenReviewingProcessedSuggestions() throws Exception {
         Long suggestionId = extractFirstSuggestionId();
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", suggestionId))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, suggestionId))
             .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/task-suggestions/{id}/accept", suggestionId))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept", PROJECT_ID, meetingId, suggestionId))
             .andExpect(status().isConflict());
-        mockMvc.perform(post("/api/task-suggestions/{id}/reject", suggestionId))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/reject", PROJECT_ID, meetingId, suggestionId))
             .andExpect(status().isConflict());
-        mockMvc.perform(put("/api/task-suggestions/{id}", suggestionId)
+        mockMvc.perform(put("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}", PROJECT_ID, meetingId, suggestionId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\": \"Changed\"}"))
             .andExpect(status().isConflict());
@@ -200,8 +200,26 @@ class TaskSuggestionApiIntegrationTest {
         assertThat(taskRepository.count()).isEqualTo(1);
     }
 
+    @Test
+    void rejectsAMeetingAndSuggestionFromAnotherProject() throws Exception {
+        Long otherMeetingId = meeting(OTHER_PROJECT_ID, """
+            ACTION: Outsider | Review the other project | 2026-10-07
+            """);
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{id}/task-suggestions/extract", PROJECT_ID, otherMeetingId))
+            .andExpect(status().isNotFound());
+
+        Long suggestionId = extractFirstSuggestionId();
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/accept",
+                OTHER_PROJECT_ID, meetingId, suggestionId))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{meetingId}/task-suggestions/{id}/reject",
+                OTHER_PROJECT_ID, meetingId, suggestionId))
+            .andExpect(status().isNotFound());
+        assertThat(taskRepository.count()).isZero();
+    }
+
     private Long extractFirstSuggestionId() throws Exception {
-        mockMvc.perform(post("/api/meetings/{id}/task-suggestions/extract", meetingId))
+        mockMvc.perform(post("/api/projects/{projectId}/meetings/{id}/task-suggestions/extract", PROJECT_ID, meetingId))
             .andExpect(status().isOk());
         return idWithTitle(taskSuggestionRepository.findByMeetingId(meetingId), "Run Qwen baseline");
     }

@@ -98,8 +98,7 @@ public class ResearchTraceService {
         Meeting meeting = meetingRepository.findById(meetingId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + meetingId));
         if (!Objects.equals(meeting.getProjectId(), projectId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Meeting " + meetingId + " does not belong to project " + projectId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found: " + meetingId);
         }
         return meeting;
     }
@@ -123,7 +122,7 @@ public class ResearchTraceService {
         ResearchDecision decision = researchDecisionRepository.findById(decisionId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Decision not found: " + decisionId));
         if (!Objects.equals(decision.getProjectId(), projectId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision does not belong to project " + projectId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Decision not found: " + decisionId);
         }
         return decision;
     }
@@ -274,7 +273,7 @@ public class ResearchTraceService {
         Experiment experiment = experimentRepository.findById(experimentId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Experiment not found: " + experimentId));
         if (!Objects.equals(experiment.getProjectId(), projectId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Experiment does not belong to project " + projectId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Experiment not found: " + experimentId);
         }
         return experiment;
     }
@@ -288,8 +287,8 @@ public class ResearchTraceService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Guiding decision not found: " + request.getResearchDecisionId()));
             if (!Objects.equals(decision.getProjectId(), projectId)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Decision " + request.getResearchDecisionId() + " belongs to a different project.");
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Guiding decision not found: " + request.getResearchDecisionId());
             }
         }
 
@@ -338,8 +337,8 @@ public class ResearchTraceService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Guiding decision not found: " + researchDecisionId));
             if (!Objects.equals(decision.getProjectId(), projectId)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Decision " + researchDecisionId + " belongs to a different project.");
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Decision not found: " + researchDecisionId);
             }
         }
         experiment.setResearchDecisionId(researchDecisionId);
@@ -369,8 +368,8 @@ public class ResearchTraceService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "Experiment not found: " + request.getExperimentId()));
         if (!Objects.equals(experiment.getProjectId(), projectId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Experiment " + request.getExperimentId() + " belongs to a different project.");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Experiment not found: " + request.getExperimentId());
         }
 
         validateMeetingBelongsToProject(request.getMeetingId(), projectId);

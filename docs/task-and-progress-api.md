@@ -85,13 +85,13 @@ Returns all tasks strictly scoped to `{projectId}`.
 
 ### 2.3 Get One Task
 
-`GET /api/tasks/{taskId}`
+`GET /api/projects/{projectId}/tasks/{taskId}`
 
-Returns a single task by its unique ID. Returns `404 Not Found` if the task does not exist.
+Returns a single task when it belongs to `{projectId}`. Returns `404 Not Found` when the task does not exist or belongs to another project. There is no unscoped `GET /api/tasks/{taskId}`.
 
 ### 2.4 Update Task Details
 
-`PUT /api/tasks/{taskId}`
+`PUT /api/projects/{projectId}/tasks/{taskId}`
 
 Modifies general task fields (`title`, `description`, `dueDate`, `milestoneId`, `assignedToUserId`, `researchDecisionId`, `experimentId`). Validates that referenced milestone, research decision, and experiment belong to the task's project.
 
@@ -120,7 +120,7 @@ Updates the task status.
 
 ### 2.6 Get Task Lifecycle History
 
-`GET /api/tasks/{taskId}/history`
+`GET /api/projects/{projectId}/tasks/{taskId}/history`
 
 Returns the chronological history of status changes for `{taskId}`.
 

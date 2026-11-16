@@ -10,7 +10,13 @@ import com.researchtrace.backend.model.TaskStatus;
 import com.researchtrace.backend.model.TaskSuggestion;
 import com.researchtrace.backend.model.TaskSuggestionStatus;
 import com.researchtrace.backend.model.TextLimits;
+import com.researchtrace.backend.model.Experiment;
+import com.researchtrace.backend.model.ProjectMemberRole;
+import com.researchtrace.backend.model.Meeting;
+import com.researchtrace.backend.model.ResearchDecision;
 import com.researchtrace.backend.repository.ExperimentRepository;
+import com.researchtrace.backend.repository.MeetingRepository;
+import com.researchtrace.backend.repository.ProjectMemberRepository;
 import com.researchtrace.backend.repository.ResearchDecisionRepository;
 import com.researchtrace.backend.repository.ResearchEventRepository;
 import com.researchtrace.backend.repository.TaskHistoryRepository;
@@ -45,6 +51,8 @@ public class TaskService {
     private final ExperimentRepository experimentRepository;
     private final ResearchEventRepository researchEventRepository;
     private final ProgressService progressService;
+    private final MeetingRepository meetingRepository;
+    private final ProjectMemberRepository projectMemberRepository;
 
     @Autowired
     public TaskService(
@@ -55,7 +63,9 @@ public class TaskService {
             ResearchDecisionRepository researchDecisionRepository,
             ExperimentRepository experimentRepository,
             ResearchEventRepository researchEventRepository,
-            @Nullable ProgressService progressService) {
+            @Nullable ProgressService progressService,
+            @Nullable MeetingRepository meetingRepository,
+            @Nullable ProjectMemberRepository projectMemberRepository) {
         this.taskRepository = taskRepository;
         this.milestoneService = milestoneService;
         this.taskSuggestionRepository = taskSuggestionRepository;
@@ -64,6 +74,22 @@ public class TaskService {
         this.experimentRepository = experimentRepository;
         this.researchEventRepository = researchEventRepository;
         this.progressService = progressService;
+        this.meetingRepository = meetingRepository;
+        this.projectMemberRepository = projectMemberRepository;
+    }
+
+    public TaskService(
+            TaskRepository taskRepository,
+            MilestoneService milestoneService,
+            TaskSuggestionRepository taskSuggestionRepository,
+            TaskHistoryRepository taskHistoryRepository,
+            ResearchDecisionRepository researchDecisionRepository,
+            ExperimentRepository experimentRepository,
+            ResearchEventRepository researchEventRepository,
+            @Nullable ProgressService progressService) {
+        this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
+             researchDecisionRepository, experimentRepository, researchEventRepository,
+             progressService, null, null);
     }
 
     public TaskService(
@@ -75,7 +101,7 @@ public class TaskService {
             ExperimentRepository experimentRepository,
             ResearchEventRepository researchEventRepository) {
         this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
-             researchDecisionRepository, experimentRepository, researchEventRepository, null);
+             researchDecisionRepository, experimentRepository, researchEventRepository, null, null, null);
     }
 
     public TaskService(
@@ -86,7 +112,7 @@ public class TaskService {
             ResearchDecisionRepository researchDecisionRepository,
             ExperimentRepository experimentRepository) {
         this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
-             researchDecisionRepository, experimentRepository, null, null);
+             researchDecisionRepository, experimentRepository, null, null, null, null);
     }
 
     public TaskService(
@@ -95,14 +121,14 @@ public class TaskService {
             TaskSuggestionRepository taskSuggestionRepository,
             TaskHistoryRepository taskHistoryRepository) {
         this(taskRepository, milestoneService, taskSuggestionRepository, taskHistoryRepository,
-             null, null, null, null);
+             null, null, null, null, null, null);
     }
 
     public TaskService(
             TaskRepository taskRepository,
             MilestoneService milestoneService,
             TaskSuggestionRepository taskSuggestionRepository) {
-        this(taskRepository, milestoneService, taskSuggestionRepository, null, null, null, null, null);
+        this(taskRepository, milestoneService, taskSuggestionRepository, null, null, null, null, null, null, null);
     }
 
     public List<Task> getAllTasks() {
@@ -111,6 +137,81 @@ public class TaskService {
 
     public Optional<Task> getTaskById(Long id) {
         return taskRepository.findById(id);
+    }
+
+    public Task getTaskForProject(Long projectId, Long taskId) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+        if (projectId == null || !projectId.equals(task.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found");
+        }
+        return task;
+    }
+
+    public List<TaskHistory> getTaskHistoryForProject(Long projectId, Long taskId) {
+        getTaskForProject(projectId, taskId);
+        return getTaskHistory(taskId);
+    }
+
+    public List<Task> getTasksByMilestoneForProject(Long projectId, Long milestoneId) {
+        Milestone milestone = milestoneService.getMilestoneById(milestoneId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+        if (projectId == null || !projectId.equals(milestone.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found");
+        }
+        return taskRepository.findByMilestoneIdAndProjectId(milestoneId, projectId);
+    }
+
+    public List<Task> getTasksByAssigneeForProject(Long projectId, Long assigneeId) {
+        if (projectId == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found");
+        }
+        return taskRepository.findByAssigneeIdAndProjectId(assigneeId, projectId);
+    }
+
+    public List<Task> getTasksByResearchDecisionForProject(Long projectId, Long decisionId) {
+        ResearchDecision decision = researchDecisionRepository.findById(decisionId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Research decision not found"));
+        if (projectId == null || !projectId.equals(decision.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Research decision not found");
+        }
+        return taskRepository.findByProjectIdAndResearchDecisionId(projectId, decisionId);
+    }
+
+    public List<Task> getTasksByExperimentForProject(Long projectId, Long experimentId) {
+        Experiment experiment = experimentRepository.findById(experimentId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Experiment not found"));
+        if (projectId == null || !projectId.equals(experiment.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Experiment not found");
+        }
+        return taskRepository.findByProjectIdAndExperimentId(projectId, experimentId);
+    }
+
+    @Transactional
+    public Task updateTaskForProject(Long projectId, Long taskId, Task update, Long userId) {
+        getTaskForProject(projectId, taskId);
+        if (update == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
+        }
+        if (update.getProjectId() != null && !projectId.equals(update.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found");
+        }
+        if (update.getTitle() != null) {
+            String title = update.getTitle().trim();
+            if (title.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task title must not be blank");
+            }
+            update.setTitle(title);
+        }
+        update.setId(taskId);
+        update.setProjectId(projectId);
+        return saveTask(update, userId);
+    }
+
+    @Transactional
+    public void deleteTaskForProject(Long projectId, Long taskId) {
+        getTaskForProject(projectId, taskId);
+        deleteTask(taskId);
     }
 
     public List<Task> getTasksByMilestone(Long milestoneId) {
@@ -138,7 +239,7 @@ public class TaskService {
         }
         if (directTasks != null) {
             for (Task task : directTasks) {
-                if (task.getId() != null) {
+                if (belongsToProject(task, projectId)) {
                     tasks.put(task.getId(), task);
                 }
             }
@@ -151,7 +252,7 @@ public class TaskService {
                 .toList();
             if (!milestoneIds.isEmpty()) {
                 for (Task task : taskRepository.findByMilestoneIdIn(milestoneIds)) {
-                    if (task.getId() != null && !tasks.containsKey(task.getId())) {
+                    if (belongsToProject(task, projectId) && !tasks.containsKey(task.getId())) {
                         tasks.put(task.getId(), task);
                     }
                 }
@@ -169,7 +270,7 @@ public class TaskService {
             if (!acceptedTaskIds.isEmpty()) {
                 taskRepository.findAllById(acceptedTaskIds)
                     .forEach(task -> {
-                        if (task.getId() != null && !tasks.containsKey(task.getId())) {
+                        if (belongsToProject(task, projectId) && !tasks.containsKey(task.getId())) {
                             tasks.put(task.getId(), task);
                         }
                     });
@@ -180,6 +281,27 @@ public class TaskService {
         return tasks.values().stream()
             .sorted(Comparator.comparing(Task::getId, Comparator.nullsLast(Comparator.naturalOrder())))
             .toList();
+    }
+
+    @Transactional
+    public Task createForProject(Long projectId, Task task) {
+        if (projectId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Project ID is required");
+        }
+        if (task == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
+        }
+        String title = task.getTitle() == null ? "" : task.getTitle().trim();
+        if (title.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task title must not be blank");
+        }
+        task.setTitle(title);
+        task.setId(null);
+        task.setProjectId(projectId);
+        if (task.getStatus() == null) {
+            task.setStatus(TaskStatus.TODO);
+        }
+        return saveTask(task);
     }
 
     @Transactional
@@ -250,6 +372,8 @@ public class TaskService {
 
         validateMilestone(task);
         validateResearchLinks(task);
+        validateMeeting(task);
+        validateAssignee(task);
 
         Task saved = taskRepository.save(task);
 
@@ -354,6 +478,10 @@ public class TaskService {
         return pts.divide(BigDecimal.valueOf(unique.size()), 2, RoundingMode.HALF_UP);
     }
 
+    private static boolean belongsToProject(Task task, Long projectId) {
+        return task != null && task.getId() != null && projectId != null && projectId.equals(task.getProjectId());
+    }
+
     private void validateMilestone(Task task) {
         if (task.getMilestoneId() != null && milestoneService != null) {
             Optional<Milestone> milestoneOpt = milestoneService.getMilestoneById(task.getMilestoneId());
@@ -387,6 +515,29 @@ public class TaskService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Experiment must belong to the task's project");
                 }
             }
+        }
+    }
+
+    private void validateMeeting(Task task) {
+        if (task.getMeetingId() == null || meetingRepository == null) {
+            return;
+        }
+        Meeting meeting = meetingRepository.findById(task.getMeetingId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting not found: " + task.getMeetingId()));
+        if (task.getProjectId() != null && !task.getProjectId().equals(meeting.getProjectId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting must belong to the task's project");
+        }
+    }
+
+    private void validateAssignee(Task task) {
+        if (task.getAssigneeId() == null || projectMemberRepository == null || task.getProjectId() == null) {
+            return;
+        }
+        boolean student = projectMemberRepository.findByProjectId(task.getProjectId()).stream()
+            .anyMatch(membership -> task.getAssigneeId().equals(membership.getUserId())
+                && membership.getRole() == ProjectMemberRole.STUDENT);
+        if (!student) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Assignee must be a student member of the task's project");
         }
     }
 

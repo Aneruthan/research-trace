@@ -2,10 +2,13 @@ import { API_BASE_URL, parseJsonResponse, readErrorMessage } from './config.ts'
 import type { SuggestionUpdate, TaskSuggestion } from './types.ts'
 
 export async function getTaskSuggestions(
+  projectId: number,
   meetingId: number,
   signal?: AbortSignal,
 ): Promise<TaskSuggestion[]> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/task-suggestions`, {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/task-suggestions`,
+    {
     signal,
   })
   if (!response.ok) {
@@ -14,8 +17,10 @@ export async function getTaskSuggestions(
   return parseJsonResponse<TaskSuggestion[]>(response)
 }
 
-export async function extractTaskSuggestions(meetingId: number): Promise<TaskSuggestion[]> {
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/task-suggestions/extract`, {
+export async function extractTaskSuggestions(projectId: number, meetingId: number): Promise<TaskSuggestion[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/task-suggestions/extract`,
+    {
     method: 'POST',
   })
   if (!response.ok) {
@@ -25,10 +30,14 @@ export async function extractTaskSuggestions(meetingId: number): Promise<TaskSug
 }
 
 export async function updateTaskSuggestion(
+  projectId: number,
+  meetingId: number,
   suggestionId: number,
   update: SuggestionUpdate,
 ): Promise<TaskSuggestion> {
-  const response = await fetch(`${API_BASE_URL}/api/task-suggestions/${suggestionId}`, {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/task-suggestions/${suggestionId}`,
+    {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -39,8 +48,14 @@ export async function updateTaskSuggestion(
   return parseJsonResponse<TaskSuggestion>(response)
 }
 
-export async function acceptTaskSuggestion(suggestionId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/task-suggestions/${suggestionId}/accept`, {
+export async function acceptTaskSuggestion(
+  projectId: number,
+  meetingId: number,
+  suggestionId: number,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/task-suggestions/${suggestionId}/accept`,
+    {
     method: 'POST',
   })
   if (!response.ok) {
@@ -48,8 +63,14 @@ export async function acceptTaskSuggestion(suggestionId: number): Promise<void> 
   }
 }
 
-export async function rejectTaskSuggestion(suggestionId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/task-suggestions/${suggestionId}/reject`, {
+export async function rejectTaskSuggestion(
+  projectId: number,
+  meetingId: number,
+  suggestionId: number,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/task-suggestions/${suggestionId}/reject`,
+    {
     method: 'POST',
   })
   if (!response.ok) {

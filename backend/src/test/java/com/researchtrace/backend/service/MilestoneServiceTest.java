@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -166,5 +167,66 @@ class MilestoneServiceTest {
         milestoneService.deleteMilestone(3L);
 
         verify(milestoneRepository).deleteById(3L);
+    }
+
+    @Test
+    void createAssignsThePathProjectEvenWhenTheBodyNamesAnother() {
+        when(milestoneRepository.save(any(Milestone.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Milestone input = new Milestone();
+        input.setTitle("Plan");
+        input.setProjectId(9L);
+
+        Milestone saved = milestoneService.createForProject(1L, input);
+
+        assertThat(saved.getId()).isNull();
+        assertThat(saved.getProjectId()).isEqualTo(1L);
+        assertThat(saved.getStatus()).isEqualTo(MilestoneStatus.NOT_STARTED);
+    }
+
+    @Test
+    void createRejectsABlankTitle() {
+        Milestone input = new Milestone();
+        input.setTitle(" ");
+
+        assertThatThrownBy(() -> milestoneService.createForProject(1L, input))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(milestoneRepository, never()).save(any());
+    }
+
+    @Test
+    void crossProjectMilestoneReadUpdateAndDeleteAreRejected() {
+        Milestone other = new Milestone();
+        other.setId(3L);
+        other.setProjectId(2L);
+        when(milestoneRepository.findById(3L)).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> milestoneService.getMilestoneForProject(1L, 3L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> milestoneService.updateForProject(1L, 3L, new MilestoneUpdateRequest()))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> milestoneService.deleteForProject(1L, 3L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verify(milestoneRepository, never()).save(any());
+        verify(milestoneRepository, never()).deleteById(any());
+        verify(taskRepository, never()).findByMilestoneId(any());
+    }
+
+    @Test
+    void projectScopedDeleteStillKeepsAMilestoneThatHasTasks() {
+        Milestone own = new Milestone();
+        own.setId(3L);
+        own.setProjectId(1L);
+        when(milestoneRepository.findById(3L)).thenReturn(Optional.of(own));
+        when(taskRepository.findByMilestoneId(3L)).thenReturn(List.of(new Task()));
+
+        assertThatThrownBy(() -> milestoneService.deleteForProject(1L, 3L))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(milestoneRepository, never()).deleteById(3L);
     }
 }

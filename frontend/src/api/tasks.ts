@@ -1,6 +1,18 @@
 import { API_BASE_URL, parseJsonResponse, readErrorMessage } from './config.ts'
 import type { Task, TaskStatus } from './types.ts'
 
+export async function getProjectTask(
+  projectId: number,
+  taskId: number,
+  signal?: AbortSignal,
+): Promise<Task> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}`, { signal })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, `Could not load task ${taskId}`))
+  }
+  return parseJsonResponse<Task>(response, `Could not load task ${taskId}`)
+}
+
 export async function getProjectTasks(projectId: number, signal?: AbortSignal): Promise<Task[]> {
   const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks`, {
     signal,
@@ -12,11 +24,65 @@ export async function getProjectTasks(projectId: number, signal?: AbortSignal): 
   return parseJsonResponse<Task[]>(response, `Could not load tasks for project ${projectId}`)
 }
 
+export async function createProjectTask(
+  projectId: number,
+  task: Pick<Task, 'title' | 'description' | 'assigneeId' | 'milestoneId' | 'dueDate' | 'status'>,
+): Promise<Task> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(task),
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Could not create task'))
+  }
+  return parseJsonResponse<Task>(response, 'Could not create task')
+}
+
+export async function updateProjectTask(task: Task): Promise<Task> {
+  if (task.id == null || task.projectId == null) {
+    throw new Error('Task is missing its project')
+  }
+  const response = await fetch(`${API_BASE_URL}/api/projects/${task.projectId}/tasks/${task.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: task.title,
+      description: task.description,
+      assigneeId: task.assigneeId,
+      milestoneId: task.milestoneId,
+      dueDate: task.dueDate,
+      status: task.status,
+      meetingId: task.meetingId,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, `Could not update task ${task.id}`))
+  }
+  return parseJsonResponse<Task>(response, `Could not update task ${task.id}`)
+}
+
+export async function getTaskHistory(projectId: number, taskId: number, signal?: AbortSignal) {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}/history`, { signal })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Could not load task history'))
+  }
+  return parseJsonResponse<Array<{
+    id: number | null
+    previousStatus: string | null
+    newStatus: string | null
+    changedAt: string | null
+  }>>(response, 'Could not load task history')
+}
+
 export async function updateTaskStatus(task: Task, status: TaskStatus): Promise<Task> {
   if (task.id == null) {
     throw new Error('Task has no id')
   }
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${task.id}`, {
+  if (task.projectId == null) {
+    throw new Error(`Task ${task.id} has no project`)
+  }
+  const response = await fetch(`${API_BASE_URL}/api/projects/${task.projectId}/tasks/${task.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -47,14 +113,14 @@ export async function getProjectProgress(projectId: number, signal?: AbortSignal
 }
 
 export async function getStudentProgress(
+  projectId: number,
   studentId: number,
-  projectId?: number,
   signal?: AbortSignal,
 ): Promise<number> {
-  const url = projectId != null
-    ? `${API_BASE_URL}/api/students/${studentId}/progress?projectId=${projectId}`
-    : `${API_BASE_URL}/api/students/${studentId}/progress`
-  const response = await fetch(url, { signal })
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/students/${studentId}/progress`,
+    { signal },
+  )
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, 'Could not load student progress'))
   }
