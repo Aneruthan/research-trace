@@ -27,6 +27,9 @@ public class ExtractionReview {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String extractionJson;
 
+    @Column(columnDefinition = "TEXT")
+    private String originalExtractionJson;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -60,6 +63,14 @@ public class ExtractionReview {
 
     public void setExtractionJson(String extractionJson) {
         this.extractionJson = extractionJson;
+    }
+
+    public String getOriginalExtractionJson() {
+        return originalExtractionJson;
+    }
+
+    public void setOriginalExtractionJson(String originalExtractionJson) {
+        this.originalExtractionJson = originalExtractionJson;
     }
 
     public LocalDateTime getCreatedAt() {

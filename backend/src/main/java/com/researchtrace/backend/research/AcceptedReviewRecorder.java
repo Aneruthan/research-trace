@@ -62,7 +62,9 @@ public class AcceptedReviewRecorder {
         claim.setContentHash(contentHash);
         researchReviewClaimRepository.saveAndFlush(claim);
 
-        String sourceReference = "meeting:" + review.getMeetingId() + ";review:" + review.getId();
+        String sourceReference = "meeting:" + review.getMeetingId()
+            + ";review:" + review.getId()
+            + ";origin:" + origin(review);
         Map<String, Long> experimentsByTitle = saveExperiments(review, projectId, extraction, sourceReference);
         saveDecisions(review, projectId, extraction, sourceReference);
         saveResults(review, projectId, extraction, sourceReference, experimentsByTitle);
@@ -116,6 +118,7 @@ public class AcceptedReviewRecorder {
             experiment.setHypothesis(blankToNull(extracted.getObjective()));
             experiment.setMethod(blankToNull(extracted.getMethod()));
             experiment.setStatus(ExperimentStatus.PLANNED);
+            experiment.setExtractionReviewId(review.getId());
             experiment.setSourceReference(sourceReference);
             Experiment saved = experimentRepository.save(experiment);
             experimentsByTitle.put(title, saved.getId());
@@ -151,6 +154,7 @@ public class AcceptedReviewRecorder {
             result.setDataOrMetric(blankToNull(extracted.getMetrics()));
             result.setComparison(blankToNull(extracted.getComparison()));
             result.setObservedAt(review.getCreatedAt());
+            result.setExtractionReviewId(review.getId());
             result.setSourceReference(sourceReference);
             Result saved = resultRepository.save(result);
             saveEvent(review, projectId, ResearchEventType.RESULT, summary,
@@ -181,6 +185,13 @@ public class AcceptedReviewRecorder {
         event.setResultId(resultId);
         event.setSourceReference(sourceReference);
         researchEventRepository.save(event);
+    }
+
+    private static String origin(ExtractionReview review) {
+        if (review.getOriginalExtractionJson() == null || review.getOriginalExtractionJson().isBlank()) {
+            return "unknown";
+        }
+        return review.getOriginalExtractionJson().equals(review.getExtractionJson()) ? "ai" : "edited";
     }
 
     private static <T> List<T> list(List<T> values) {

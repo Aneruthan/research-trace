@@ -29,7 +29,7 @@ import { useActiveProject } from '../project/ActiveProjectContext'
 import { isCurrentProjectResponse } from '../project/projectSelection'
 import { ExtractionSections } from '../components/research/ExtractionSections'
 import { PersistedResearch } from '../components/research/PersistedResearch'
-import { buildDecisionChains, reviewOutcomeMessage } from '../components/research/researchDisplay'
+import { buildDecisionChains, extractionOrigin, reviewOutcomeMessage } from '../components/research/researchDisplay'
 
 type ActiveTab = 'overview' | 'timeline' | 'decisions' | 'changes' | 'extraction'
 
@@ -73,6 +73,7 @@ export function ResearchTrace() {
 
   // Extraction & Review
   const [extraction, setExtraction] = useState<MeetingExtraction | null>(null)
+  const [originalExtraction, setOriginalExtraction] = useState<MeetingExtraction | null>(null)
   const [extracting, setExtracting] = useState(false)
   const [reviews, setReviews] = useState<ExtractionReview[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
@@ -94,6 +95,7 @@ export function ResearchTrace() {
     setResults([])
     setMeetingId(null)
     setExtraction(null)
+    setOriginalExtraction(null)
     setLineage(null)
     setSelectedDecisionId(null)
     setMeetingsError(null)
@@ -196,10 +198,12 @@ export function ResearchTrace() {
     setErrorMessage(null)
     setStatusMessage(null)
     setExtraction(null)
+    setOriginalExtraction(null)
     try {
       if (activeProjectId == null) return
       const result = await extractResearch(activeProjectId, meetingId)
       setExtraction(result)
+      setOriginalExtraction(structuredClone(result))
       setStatusMessage('Research information extracted. Review suggestions below and confirm or edit.')
     } catch (cause: unknown) {
       setErrorMessage(cause instanceof Error ? cause.message : 'Could not extract research information')
@@ -210,13 +214,16 @@ export function ResearchTrace() {
 
   async function handleReview(status: ResearchReviewStatus) {
     if (meetingId == null || extraction == null) return
+    if (status === 'ACCEPTED' && !window.confirm('Accept this version into the research trace? Accepted records are kept and are not replaced by a later acceptance of the same content.')) return
+    if (status === 'REJECTED' && !window.confirm('Reject these suggestions? The review will be kept, and nothing will be added to the research trace.')) return
     setSubmittingReview(status)
     setErrorMessage(null)
     setStatusMessage(null)
     try {
       if (activeProjectId == null) return
-      await submitResearchReview(activeProjectId, meetingId, status, extraction)
+      await submitResearchReview(activeProjectId, meetingId, status, extraction, originalExtraction)
       setExtraction(null)
+      setOriginalExtraction(null)
       setReviews(await getResearchReviews(activeProjectId, meetingId))
       await refreshSummary(activeProjectId)
       setStatusMessage(reviewOutcomeMessage(status))
@@ -682,7 +689,7 @@ export function ResearchTrace() {
                 </div>
               </div>
 
-              <ExtractionSections extraction={extraction} />
+              <ExtractionSections extraction={extraction} onChange={setExtraction} />
             </div>
           )}
 
@@ -700,7 +707,7 @@ export function ResearchTrace() {
                 {reviews.map((r) => (
                   <li key={r.id} className="rounded-md border border-stone-100 bg-stone-50 p-3">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-stone-900">{r.status}</span>
+                      <span className="font-semibold text-stone-900">{r.status} · {extractionOrigin(r.originalExtractionJson, r.extractionJson)}</span>
                       <span className="text-stone-500">{r.createdAt?.replace('T', ' ').slice(0, 16)}</span>
                     </div>
                   </li>

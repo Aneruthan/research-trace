@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
 import type { MeetingExtraction } from '../../api/research'
+import { editExtractionList } from './researchDisplay'
 
 type ExtractionSectionsProps = {
   extraction: MeetingExtraction
+  onChange?: (extraction: MeetingExtraction) => void
 }
 
-export function ExtractionSections({ extraction }: ExtractionSectionsProps) {
+export function ExtractionSections({ extraction, onChange }: ExtractionSectionsProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Section title="Tasks" empty="No tasks extracted.">
@@ -19,7 +21,13 @@ export function ExtractionSections({ extraction }: ExtractionSectionsProps) {
         ))}
       </Section>
       <Section title="Decisions" empty="No decisions extracted.">
-        {(extraction.decisions ?? []).map((item, index) => (
+        {(extraction.decisions ?? []).map((item, index) => onChange ? (
+          <EditableItem key={index} label="Decision title">
+            <Field label="Title" value={item.title} onChange={(value) => onChange({ ...extraction, decisions: editExtractionList(extraction.decisions, index, { title: value }) })} />
+            <Field label="Description" value={item.description} onChange={(value) => onChange({ ...extraction, decisions: editExtractionList(extraction.decisions, index, { description: value }) })} />
+            <Field label="Reason" value={item.reason} onChange={(value) => onChange({ ...extraction, decisions: editExtractionList(extraction.decisions, index, { reason: value }) })} />
+          </EditableItem>
+        ) : (
           <Item key={index} title={item.title} confidence={item.confidence} lines={lines(
             ['Description', item.description],
             ['Made by', item.madeBy],
@@ -29,7 +37,13 @@ export function ExtractionSections({ extraction }: ExtractionSectionsProps) {
         ))}
       </Section>
       <Section title="Experiments" empty="No experiments extracted.">
-        {(extraction.experiments ?? []).map((item, index) => (
+        {(extraction.experiments ?? []).map((item, index) => onChange ? (
+          <EditableItem key={index} label="Experiment title">
+            <Field label="Title" value={item.title} onChange={(value) => onChange({ ...extraction, experiments: editExtractionList(extraction.experiments, index, { title: value }) })} />
+            <Field label="Objective" value={item.objective} onChange={(value) => onChange({ ...extraction, experiments: editExtractionList(extraction.experiments, index, { objective: value }) })} />
+            <Field label="Method" value={item.method ?? null} onChange={(value) => onChange({ ...extraction, experiments: editExtractionList(extraction.experiments, index, { method: value }) })} />
+          </EditableItem>
+        ) : (
           <Item key={index} title={item.title} confidence={item.confidence} lines={lines(
             ['Description', item.description],
             ['Objective', item.objective],
@@ -40,7 +54,12 @@ export function ExtractionSections({ extraction }: ExtractionSectionsProps) {
         ))}
       </Section>
       <Section title="Results" empty="No results extracted.">
-        {(extraction.results ?? []).map((item, index) => (
+        {(extraction.results ?? []).map((item, index) => onChange ? (
+          <EditableItem key={index} label="Result description">
+            <Field label="Description" value={item.description} onChange={(value) => onChange({ ...extraction, results: editExtractionList(extraction.results, index, { description: value }) })} />
+            <Field label="Comparison" value={item.comparison} onChange={(value) => onChange({ ...extraction, results: editExtractionList(extraction.results, index, { comparison: value }) })} />
+          </EditableItem>
+        ) : (
           <Item key={index} title={item.description} confidence={item.confidence} lines={lines(
             ['Experiment', item.experiment],
             ['Metrics', item.metrics],
@@ -125,6 +144,23 @@ function Item({
         </ul>
       ) : null}
     </li>
+  )
+}
+
+function EditableItem({ label, children }: { label: string; children: ReactNode }) {
+  return <li className="space-y-2 border-t border-stone-100 pt-3 first:border-t-0 first:pt-0" aria-label={label}>{children}</li>
+}
+
+function Field({ label, value, onChange }: { label: string; value: string | null; onChange: (value: string) => void }) {
+  return (
+    <label className="block text-xs font-medium text-stone-600">
+      {label}
+      <input
+        className="mt-1 w-full rounded-md border border-stone-300 px-2 py-1 text-sm text-stone-900"
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   )
 }
 

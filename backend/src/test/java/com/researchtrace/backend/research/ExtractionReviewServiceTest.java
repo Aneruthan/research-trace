@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -141,6 +142,52 @@ class ExtractionReviewServiceTest {
         assertThatThrownBy(() -> extractionReviewService.getReviewsForMeeting(99L))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Meeting not found");
+        verify(extractionReviewRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void editedReviewKeepsTheOriginalExtractionSeparateFromTheEditedOne() {
+        when(meetingService.getMeetingById(MEETING_ID)).thenReturn(Optional.of(meeting()));
+        ExtractionReviewRequest review = request(ExtractionReviewStatus.EDITED);
+        MeetingExtractionResponse original = new MeetingExtractionResponse();
+        ExtractedDecision originalDecision = new ExtractedDecision();
+        originalDecision.setTitle("Keep the baseline");
+        original.setDecisions(List.of(originalDecision));
+        review.setOriginalExtraction(original);
+        review.getExtraction().getDecisions().get(0).setTitle("Use a balanced split");
+
+        ExtractionReview saved = extractionReviewService.reviewExtraction(MEETING_ID, review);
+
+        assertThat(saved.getExtractionJson()).contains("Use a balanced split");
+        assertThat(saved.getExtractionJson()).doesNotContain("Keep the baseline");
+        assertThat(saved.getOriginalExtractionJson()).contains("Keep the baseline");
+        verify(acceptedReviewRecorder, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void acceptedReviewRecordsTheEditedExtraction() {
+        Meeting meeting = meeting();
+        meeting.setProjectId(PROJECT_ID);
+        when(meetingService.getMeetingById(MEETING_ID)).thenReturn(Optional.of(meeting));
+        ExtractionReviewRequest review = request(ExtractionReviewStatus.ACCEPTED);
+        review.getExtraction().getDecisions().get(0).setTitle("Use a balanced split");
+
+        extractionReviewService.reviewExtraction(MEETING_ID, review);
+
+        ArgumentCaptor<MeetingExtractionResponse> recorded = ArgumentCaptor.forClass(MeetingExtractionResponse.class);
+        verify(acceptedReviewRecorder).record(any(), eq(PROJECT_ID), recorded.capture());
+        assertThat(recorded.getValue().getDecisions().get(0).getTitle()).isEqualTo("Use a balanced split");
+    }
+
+    @Test
+    void blankEditedDecisionTitleIsRejected() {
+        when(meetingService.getMeetingById(MEETING_ID)).thenReturn(Optional.of(meeting()));
+        ExtractionReviewRequest review = request(ExtractionReviewStatus.EDITED);
+        review.getExtraction().getDecisions().get(0).setTitle(" ");
+
+        assertThatThrownBy(() -> extractionReviewService.reviewExtraction(MEETING_ID, review))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
         verify(extractionReviewRepository, never()).saveAndFlush(any());
     }
 

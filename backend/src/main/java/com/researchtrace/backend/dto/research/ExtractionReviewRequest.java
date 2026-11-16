@@ -11,6 +11,8 @@ public class ExtractionReviewRequest {
     @NotNull
     private MeetingExtractionResponse extraction;
 
+    private MeetingExtractionResponse originalExtraction;
+
     public ExtractionReviewStatus getStatus() {
         return status;
     }
@@ -25,5 +27,13 @@ public class ExtractionReviewRequest {
 
     public void setExtraction(MeetingExtractionResponse extraction) {
         this.extraction = extraction;
+    }
+
+    public MeetingExtractionResponse getOriginalExtraction() {
+        return originalExtraction;
+    }
+
+    public void setOriginalExtraction(MeetingExtractionResponse originalExtraction) {
+        this.originalExtraction = originalExtraction;
     }
 }

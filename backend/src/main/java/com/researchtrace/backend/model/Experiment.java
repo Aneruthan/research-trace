@@ -25,6 +25,8 @@ public class Experiment {
 
     private Long meetingId;
 
+    private Long extractionReviewId;
+
     @Column(nullable = false)
     private String title;
 
@@ -80,6 +82,14 @@ public class Experiment {
 
     public void setMeetingId(Long meetingId) {
         this.meetingId = meetingId;
+    }
+
+    public Long getExtractionReviewId() {
+        return extractionReviewId;
+    }
+
+    public void setExtractionReviewId(Long extractionReviewId) {
+        this.extractionReviewId = extractionReviewId;
     }
 
     public String getTitle() {

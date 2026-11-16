@@ -52,6 +52,7 @@ export function MeetingDetails() {
   const [researchReviews, setResearchReviews] = useState<ExtractionReview[]>([])
   const [researchReviewsLoading, setResearchReviewsLoading] = useState(false)
   const [researchExtraction, setResearchExtraction] = useState<MeetingExtraction | null>(null)
+  const [originalResearchExtraction, setOriginalResearchExtraction] = useState<MeetingExtraction | null>(null)
   const [extractingResearch, setExtractingResearch] = useState(false)
   const [submittingReview, setSubmittingReview] = useState<ResearchReviewStatus | null>(null)
 
@@ -293,6 +294,7 @@ export function MeetingDetails() {
       if (activeProjectId == null) return
       const data = await extractResearch(activeProjectId, meetingId)
       setResearchExtraction(data)
+      setOriginalResearchExtraction(structuredClone(data))
       setActionMessage('Research entities extracted. Review suggestions below before persisting.')
     } catch (cause: unknown) {
       setActionError(cause instanceof Error ? cause.message : 'Could not extract research information')
@@ -303,13 +305,16 @@ export function MeetingDetails() {
 
   async function handleReviewResearch(status: ResearchReviewStatus) {
     if (!researchExtraction) return
+    if (status === 'ACCEPTED' && !window.confirm('Accept this version into the research trace? Accepted records are kept and are not replaced by a later acceptance of the same content.')) return
+    if (status === 'REJECTED' && !window.confirm('Reject these suggestions? The review will be kept, and nothing will be added to the research trace.')) return
     setSubmittingReview(status)
     setActionError(null)
     setActionMessage(null)
     try {
       if (activeProjectId == null) return
-      await submitResearchReview(activeProjectId, meetingId, status, researchExtraction)
+      await submitResearchReview(activeProjectId, meetingId, status, researchExtraction, originalResearchExtraction)
       setResearchExtraction(null)
+      setOriginalResearchExtraction(null)
       await loadResearchReviews()
       setActionMessage(
         status === 'ACCEPTED'
@@ -592,6 +597,14 @@ export function MeetingDetails() {
                     </button>
                     <button
                       type="button"
+                      className="rounded-md bg-indigo-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-800 disabled:opacity-60"
+                      onClick={() => void handleReviewResearch('EDITED')}
+                      disabled={submittingReview != null}
+                    >
+                      {submittingReview === 'EDITED' ? 'Saving…' : 'Save as Edited'}
+                    </button>
+                    <button
+                      type="button"
                       className="rounded-md bg-stone-950 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
                       onClick={() => void handleReviewResearch('ACCEPTED')}
                       disabled={submittingReview != null}
@@ -602,7 +615,7 @@ export function MeetingDetails() {
                 </div>
 
                 <div className="mt-5">
-                  <ExtractionSections extraction={researchExtraction} />
+                  <ExtractionSections extraction={researchExtraction} onChange={setResearchExtraction} />
                 </div>
               </div>
             ) : null}

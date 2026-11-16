@@ -26,6 +26,8 @@ public class Result {
 
     private Long meetingId;
 
+    private Long extractionReviewId;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String summary;
 
@@ -75,6 +77,14 @@ public class Result {
 
     public void setMeetingId(Long meetingId) {
         this.meetingId = meetingId;
+    }
+
+    public Long getExtractionReviewId() {
+        return extractionReviewId;
+    }
+
+    public void setExtractionReviewId(Long extractionReviewId) {
+        this.extractionReviewId = extractionReviewId;
     }
 
     public String getSummary() {

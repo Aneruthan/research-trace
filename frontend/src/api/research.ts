@@ -41,6 +41,7 @@ export type ExtractedExperiment = {
   objective: string | null
   variables: string | null
   expectedOutcome: string | null
+  method?: string | null
   source: number | null
   confidence: number | null
 }
@@ -96,6 +97,7 @@ export type ExtractionReview = {
   meetingId: number | null
   status: ResearchReviewStatus | null
   extractionJson: string | null
+  originalExtractionJson?: string | null
   createdAt: string | null
 }
 
@@ -233,11 +235,12 @@ export async function submitResearchReview(
   meetingId: number,
   status: ResearchReviewStatus,
   extraction: MeetingExtraction,
+  originalExtraction?: MeetingExtraction | null,
 ): Promise<ExtractionReview> {
   const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/meetings/${meetingId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, extraction }),
+    body: JSON.stringify({ status, extraction, originalExtraction: originalExtraction ?? null }),
   })
   if (!response.ok) {
     throw new ApiError(await failureMessage(response, 'Could not save the research review'), response.status)

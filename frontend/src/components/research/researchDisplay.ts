@@ -5,10 +5,27 @@ export function reviewOutcomeMessage(status: ResearchReviewStatus): string {
     case 'ACCEPTED':
       return 'Research review saved as ACCEPTED. Verified decisions, experiments, and results are now added to the research trace!'
     case 'EDITED':
-      return 'Research review saved as EDITED. Only direction changes were checked and flagged; no decisions, experiments, or results were added to the research trace.'
+      return 'Edited extraction saved. Accept this version to add its decisions, experiments, and results to the research trace.'
     default:
       return `Research review saved as ${status}. No records were added to the permanent trace.`
   }
+}
+
+export function editExtractionList<T extends object>(
+  items: T[] | null,
+  index: number,
+  patch: Partial<T>,
+): T[] {
+  const next = [...(items ?? [])]
+  next[index] = { ...next[index], ...patch }
+  return next
+}
+
+export function extractionOrigin(originalJson: string | null | undefined, editedJson: string | null | undefined): 'unknown' | 'ai' | 'edited' {
+  if (originalJson == null || originalJson.trim() === '') {
+    return 'unknown'
+  }
+  return originalJson === editedJson ? 'ai' : 'edited'
 }
 
 /**
