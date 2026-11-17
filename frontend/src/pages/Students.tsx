@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMembershipGaps, getProjectStudents, repairStudentMembership, type MembershipGap, type StudentWork } from '../api/students'
-import type { User } from '../api/types'
+import { getMembershipGaps, getProjectStudents, type MembershipGap, type StudentWork } from '../api/students'
 import {
   addProjectMember,
   createUser,
-  getUsers,
   removeProjectMember,
   updateProjectMember,
   updateUser,
@@ -24,13 +22,11 @@ export function Students() {
   }, [activeProjectId])
   const [students, setStudents] = useState<StudentWork[]>([])
   const [gaps, setGaps] = useState<MembershipGap[]>([])
-  const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [existingUserId, setExistingUserId] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
@@ -52,13 +48,11 @@ export function Students() {
     setLoading(true)
     Promise.all([
       getProjectStudents(projectId, controller.signal),
-      getUsers(controller.signal),
       getMembershipGaps(projectId, controller.signal).catch(() => [] as MembershipGap[]),
     ])
-      .then(([loadedStudents, loadedUsers, loadedGaps]) => {
+      .then(([loadedStudents, loadedGaps]) => {
         if (controller.signal.aborted || !isCurrentProjectResponse(projectId, activeProjectIdRef.current)) return
         setStudents(loadedStudents)
-        setUsers(loadedUsers)
         setGaps(loadedGaps)
       })
       .catch((cause: unknown) => {
@@ -75,14 +69,12 @@ export function Students() {
 
   const reload = useCallback(async () => {
     if (activeProjectId == null) return
-    const [loadedStudents, loadedUsers, loadedGaps] = await Promise.all([
+    const [loadedStudents, loadedGaps] = await Promise.all([
       getProjectStudents(activeProjectId),
-      getUsers(),
       getMembershipGaps(activeProjectId).catch(() => [] as MembershipGap[]),
     ])
     if (!isCurrentProjectResponse(activeProjectId, activeProjectIdRef.current)) return
     setStudents(loadedStudents)
-    setUsers(loadedUsers)
     setGaps(loadedGaps)
   }, [activeProjectId])
 
@@ -93,18 +85,6 @@ export function Students() {
     window.addEventListener('researchtrace-progress-changed', onProgress)
     return () => window.removeEventListener('researchtrace-progress-changed', onProgress)
   }, [reload])
-
-  async function repairGap(gap: MembershipGap) {
-    if (activeProjectId == null || gap.userId == null) return
-    setError(null)
-    try {
-      await repairStudentMembership(activeProjectId, gap.userId)
-      setMessage(`${gap.name ?? 'Student'} was added to this project. Existing tasks were left unchanged.`)
-      await reload()
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : 'Could not add this student to the project')
-    }
-  }
 
   async function createAndAdd(event: React.FormEvent) {
     event.preventDefault()
@@ -126,23 +106,6 @@ export function Students() {
       await reload()
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not create student')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function addExisting(event: React.FormEvent) {
-    event.preventDefault()
-    if (activeProjectId == null || existingUserId === '') return
-    setSaving(true)
-    setError(null)
-    try {
-      await addProjectMember(activeProjectId, { userId: Number(existingUserId), role: 'STUDENT' })
-      setExistingUserId('')
-      setMessage('Student added to this project.')
-      await reload()
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : 'Could not add student')
     } finally {
       setSaving(false)
     }
@@ -184,9 +147,6 @@ export function Students() {
     }
   }
 
-  const memberIds = new Set(students.map((student) => student.userId))
-  const availableUsers = users.filter((user) => user.role === 'STUDENT' && user.id != null && !memberIds.has(user.id))
-
   return (
     <section>
       <PageHeader
@@ -206,23 +166,16 @@ export function Students() {
           <h2 className="text-sm font-semibold text-amber-950">Students assigned to tasks but missing from this project</h2>
           <ul className="mt-2 space-y-2 text-sm text-amber-950">
             {gaps.map((gap) => (
-              <li key={gap.userId ?? gap.name} className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  {gap.name ?? `User ${gap.userId}`} · {gap.taskIds.length} task{gap.taskIds.length === 1 ? '' : 's'}
-                  {gap.reason === 'NOT_A_STUDENT' ? ' · this user is not a student, so membership was not changed' : ''}
-                </span>
-                {gap.repairable && gap.userId != null ? (
-                  <button type="button" className="rounded-md bg-stone-950 px-2 py-1 text-xs text-white" onClick={() => void repairGap(gap)}>
-                    Add to project
-                  </button>
-                ) : null}
+              <li key={gap.userId ?? gap.name}>
+                {gap.name ?? `User ${gap.userId}`} · {gap.taskIds.length} task{gap.taskIds.length === 1 ? '' : 's'}
+                {gap.reason === 'NOT_A_STUDENT' ? ' · this user is not a student, so membership was not changed' : ''}
               </li>
             ))}
           </ul>
         </section>
       ) : null}
       {!projectsLoading && activeProjectId != null && !loading ? (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="mt-6">
           <form className="rounded-lg border border-stone-200 bg-white p-4" onSubmit={(event) => void createAndAdd(event)}>
             <h2 className="text-sm font-semibold text-stone-950">Create student</h2>
             <label className="mt-3 block text-xs font-medium text-stone-600">
@@ -235,21 +188,6 @@ export function Students() {
             </label>
             <button className="mt-3 rounded-md bg-stone-950 px-3 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={saving} type="submit">
               Create and add
-            </button>
-          </form>
-          <form className="rounded-lg border border-stone-200 bg-white p-4" onSubmit={(event) => void addExisting(event)}>
-            <h2 className="text-sm font-semibold text-stone-950">Add an existing student</h2>
-            <label className="mt-3 block text-xs font-medium text-stone-600">
-              Student
-              <select className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" value={existingUserId} onChange={(event) => setExistingUserId(event.target.value)}>
-                <option value="">Select a student</option>
-                {availableUsers.map((user) => (
-                  <option key={user.id} value={user.id ?? ''}>{user.name} ({user.email})</option>
-                ))}
-              </select>
-            </label>
-            <button className="mt-3 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800" disabled={saving || existingUserId === ''} type="submit">
-              Add to project
             </button>
           </form>
         </div>
